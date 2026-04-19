@@ -1,0 +1,9 @@
+model = "gpt-5.4"
+sandbox = "read-only"
+model_reasoning_effort = "xhigh"
+output_schema = ".workflow/review/codex-review-schema.json"
+prompt_transport = "stdin"
+document_review_mode = "inline-artifact"
+parallel_reviews = 3
+max_review_turns = 10
+blocking_severities = ["critical", "major"]

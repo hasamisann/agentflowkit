@@ -1,0 +1,24 @@
+# Build artifacts
+build/
+target/
+out/
+dist/
+
+# Dependencies
+node_modules/
+
+# Logs
+logs/
+
+# Backups
+*.backup
+
+# Editor / IDE
+.vscode/settings.json
+.idea/
+*.swp
+*~
+
+# OS
+.DS_Store
+Thumbs.db

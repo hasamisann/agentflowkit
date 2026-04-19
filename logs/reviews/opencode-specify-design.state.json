@@ -1,0 +1,9 @@
+{
+  "tool": "opencode",
+  "phase": "specify-design",
+  "session_id": null,
+  "arguments": "new feature",
+  "state_path": "C:\\Users\\nalum\\project\\workflow-templates\\logs\\reviews\\opencode-specify-design.state.json",
+  "review_log_path": "C:\\Users\\nalum\\project\\workflow-templates\\logs\\reviews\\opencode-specify-design.json",
+  "targets": []
+}

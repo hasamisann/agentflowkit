@@ -1,0 +1,11 @@
+# Local workflow files
+# These files are intentionally NOT version-controlled.
+# They are excluded here (.git/info/exclude) so the project's shared .gitignore
+# can stay focused on normal build artifacts and editor noise.
+.workflow/
+.opencode/
+.claude/
+.agents/
+.spec/
+AGENTS.md
+CLAUDE.md

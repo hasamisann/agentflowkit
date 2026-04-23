@@ -31,3 +31,6 @@ Break one finalized bug investigation into atomic fix tasks.
 - Keep every fix task small enough for one TDD cycle and one commit.
 - Every bug fix plan must include an explicit regression strategy.
 - `dependencies.md` is the task execution index used by `/implement bug <bug-id> wave <N>` and must stay synchronized with task-file status.
+- After you fix your own review findings, do not re-initialize the review state. Rerun the phase `finish` using the existing state.
+- Because the `finish` pass rechecks the phase artifact set, prefer batching obviously related contract fixes across fix task files and `dependencies.md` before rerunning review.
+- If a later review pass unexpectedly returns to `round 1/<N>` after a prior round in the same invocation, stop and verify whether `prepare` was rerun or the review state was otherwise reset.

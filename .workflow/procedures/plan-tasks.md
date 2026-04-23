@@ -36,3 +36,6 @@ Break one finalized cycle document into atomic implementation tasks.
 - `dependencies.md` is the task execution index used by `/implement wave <N>` and must stay synchronized with task-file status.
 - Review findings must not contradict the active cycle `CYCLE.md`; if documents conflict, report that conflict explicitly.
 - If a review finding conflicts with a generated task file's stated requirements, treat the task file as authoritative instead of changing it only to satisfy the conflicting review.
+- After you fix your own review findings, do not re-initialize the review state. Rerun the phase `finish` using the existing state.
+- Because the `finish` pass rechecks the phase artifact set, prefer batching obviously related contract fixes across `.workflow/project_context.md`, task files, optional CI, and `dependencies.md` before rerunning review.
+- If a later review pass unexpectedly returns to `round 1/<N>` after a prior round in the same invocation, stop and verify whether `prepare` was rerun or the review state was otherwise reset.

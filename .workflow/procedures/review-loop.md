@@ -54,6 +54,12 @@ For Claude skills, pass `${CLAUDE_SESSION_ID}` so each skill invocation gets its
 For `specify-design`, artifact creation starts only when the workflow begins drafting `CYCLE.md` after `grill-me`, so do not run `prepare` during grill-me-only turns.
 Re-run the same `prepare` command before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
 
+`prepare` initializes the review state for the current command invocation. In the same invocation, run `prepare` once and preserve that state across subsequent review rounds.
+
+If you fix review findings yourself, do not rerun `prepare`. Reuse the existing review state and rerun `finish` for document phases.
+
+Rerun `prepare` only when the user provides manual review feedback, explicitly asks for re-review after a prior completion, or explicitly asks to reset review rounds.
+
 ### Finish a document-phase review
 
 Run this at the end of `specify-design`, `plan-tasks`, `investigate`, or `fix-tasks`:
@@ -66,6 +72,17 @@ If the script exits non-zero, apply the findings and run it again.
 Only blocking findings (`CRITICAL` or `MAJOR`) are required for the loop to continue.
 
 For `specify-design` and `investigate`, a successful draft review keeps approval state so the next `finish` call can validate the approval-only status transition. That follow-up pass is not another `codex exec` content review round. It only allows the documented status-only finalization change and rejects any additional content edits until `prepare` resets the review state.
+
+For multi-artifact document phases such as `specify-design`, `plan-tasks`, and `fix-tasks`, `finish` may revisit the full in-scope artifact set on each pass. Preserve the same review state across self-fix iterations so unchanged previously approved artifacts can remain approved and be skipped on later rounds within the same invocation.
+
+Correct sequence:
+1. run `prepare` once
+2. run `finish`
+3. one artifact returns blocking findings
+4. fix that artifact and any obviously related contract gaps in the same phase artifact set
+5. run `finish` again without rerunning `prepare`
+
+If a later pass in the same invocation unexpectedly returns to `round 1/<max_review_turns>` after a prior round already ran, stop and verify whether the review state was reset before continuing.
 
 ### Review one implementation task
 

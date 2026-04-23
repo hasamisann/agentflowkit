@@ -101,6 +101,25 @@ def approved_review_result() -> dict[str, object]:
     }
 
 
+def merged_review_result(findings: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "approved": len(findings) == 0,
+        "summary": "Round 1/10: 3 reviewers completed, 1 blocking findings, 0 advisory findings.",
+        "phase": "implement",
+        "artifact_type": "implementation-task",
+        "artifact_path": "artifact.md",
+        "task_file_path": "artifact.md",
+        "review_round": 1,
+        "max_review_turns": 10,
+        "parallel_reviews": 3,
+        "blocking_severities": ["critical", "major"],
+        "findings": findings,
+        "advisory_findings": [],
+        "reviewers": [{"reviewer_index": 1}, {"reviewer_index": 2}, {"reviewer_index": 3}],
+        "raw_log_paths": ["r1.json", "r2.json", "r3.json"],
+    }
+
+
 class ReviewDriverTestCase(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory()
@@ -327,6 +346,23 @@ class MergeReviewResultsTests(unittest.TestCase):
 
 
 class PromptConstructionTests(ReviewDriverTestCase):
+    def test_specify_design_prompt_includes_draft_status_rules(self) -> None:
+        cycle_doc, _, _ = create_cycle_artifacts(self.root)
+
+        config = review_driver.load_review_config(self.root)
+        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "specify-design", cycle_doc, config, 1)
+        prompt = reviewer_requests[0]["prompt"]
+
+        self.assertIn("Status transition rules:", prompt)
+        self.assertIn(
+            "During specify-design content review, `CYCLE.md` and the matching `manifest.md` row are expected to remain `DRAFT` until explicit user approval.",
+            prompt,
+        )
+        self.assertIn(
+            "The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+            prompt,
+        )
+
     def test_plan_tasks_prompt_includes_cycle_doc_docs_first_rules_and_document_lens(self) -> None:
         cycle_doc, _, _ = create_cycle_artifacts(self.root)
         artifact_path = self.root / ".workflow" / "project_context.md"
@@ -340,6 +376,14 @@ class PromptConstructionTests(ReviewDriverTestCase):
         self.assertIn("Review order:", prompt)
         self.assertIn(
             "First, verify compliance with the active cycle CYCLE.md and the other provided workflow references.",
+            prompt,
+        )
+        self.assertIn(
+            "During planning review, newly generated task files and `dependencies.md` rows are expected to remain `PENDING` until `/implement` starts.",
+            prompt,
+        )
+        self.assertIn(
+            "Do not require `ACTIVE` or `DONE` during `plan-tasks` or `fix-tasks` review just because the artifacts appear complete.",
             prompt,
         )
         self.assertIn("Do not report findings or suggested fixes that conflict with the provided documents.", prompt)
@@ -366,12 +410,77 @@ class PromptConstructionTests(ReviewDriverTestCase):
             "If a general review instinct conflicts with the task file, treat the task file as authoritative",
             prompt,
         )
+        self.assertIn("During `review-task`, the task file and its matching `dependencies.md` row are expected to remain `ACTIVE`.", prompt)
+        self.assertIn("Do not require `DONE` before review passes and the relevant verification is rerun.", prompt)
         self.assertIn("Reference: .workflow/procedures/implement.md", prompt)
         self.assertIn(review_driver.read_text_file(task_path), prompt)
         self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
         self.assertNotIn("Priority review lens:", reviewer_requests[1]["prompt"])
         self.assertIn("Priority review lens:", prompt)
         self.assertIn(config["reviewer_profiles"][2]["implementation_prompt_lens"], prompt)
+
+
+class PrematureStatusFindingSuppressionTests(ReviewDriverTestCase):
+    def test_suppresses_premature_specify_design_finalization_finding(self) -> None:
+        cycle_doc, _, _ = create_cycle_artifacts(self.root)
+        result = merged_review_result(
+            [
+                {
+                    "severity": "major",
+                    "title": "Finalize the draft",
+                    "details": "The status should be FINALIZED before the review can pass.",
+                    "location": cycle_doc.as_posix(),
+                    "suggested_fix": "Set the document status to FINALIZED.",
+                }
+            ]
+        )
+
+        updated = review_driver.suppress_premature_status_findings(result, "specify-design", "document", cycle_doc)
+
+        self.assertTrue(updated["approved"])
+        self.assertEqual(updated["findings"], [])
+        self.assertIn("0 blocking findings", updated["summary"])
+
+    def test_suppresses_premature_done_finding_during_implementation_review(self) -> None:
+        task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
+        write_file(task_path, "Status: `ACTIVE`\n\n# Task\n")
+        result = merged_review_result(
+            [
+                {
+                    "severity": "major",
+                    "title": "Mark task done now",
+                    "details": "The task should be DONE before this review passes.",
+                    "location": task_path.as_posix(),
+                    "suggested_fix": "Mark the task DONE.",
+                }
+            ]
+        )
+
+        updated = review_driver.suppress_premature_status_findings(result, "implement", "implementation-task", task_path)
+
+        self.assertTrue(updated["approved"])
+        self.assertEqual(updated["findings"], [])
+        self.assertIn("0 blocking findings", updated["summary"])
+
+    def test_keeps_real_status_mismatch_finding(self) -> None:
+        task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
+        write_file(task_path, "Status: `PENDING`\n\n# Task\n")
+        result = merged_review_result(
+            [
+                {
+                    "severity": "major",
+                    "title": "Task never entered active state",
+                    "details": "The task should be ACTIVE before implementation review starts.",
+                    "location": task_path.as_posix(),
+                    "suggested_fix": "Set the task status to ACTIVE before review.",
+                }
+            ]
+        )
+
+        updated = review_driver.suppress_premature_status_findings(result, "implement", "implementation-task", task_path)
+
+        self.assertFalse(updated["approved"])
+        self.assertEqual(len(updated["findings"]), 1)
 
 
 class RoundTrackingTests(ReviewDriverTestCase):

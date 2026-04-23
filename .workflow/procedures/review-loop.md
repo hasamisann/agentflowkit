@@ -25,6 +25,7 @@ Do not treat an artifact as complete until the merged `codex exec` review report
 
 One review round means the driver launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
 The provided documents are the source of truth for the round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
+During content review, the phase-defined in-progress status is the correct status for the artifact or task being reviewed. Reviewers must not emit blocking findings that only demand a later allowed status transition before the workflow reaches that transition point.
 
 ## Required Codex Settings
 

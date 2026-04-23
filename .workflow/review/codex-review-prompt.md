@@ -25,6 +25,8 @@ Rules:
 - Return only concrete, evidence-backed findings.
 - Use the supplied JSON schema.
 - Set approved to true only when there are no critical or major findings.
+- Judge status transitions against the documented workflow phase, not against perceived content completeness.
+- Do not require a terminal or later-phase status before the workflow explicitly allows that transition.
 - If you are unsure whether something is major or middle, choose middle.
 - Do not report speculation, stylistic preferences, or generic alternative ideas as findings.
 - For every critical or major finding, explain the concrete violated rule, evidence, or release risk.
@@ -60,6 +62,8 @@ Rules:
 - Return only concrete, evidence-backed findings.
 - Use the supplied JSON schema.
 - Set approved to true only when there are no critical or major findings.
+- During `review-task`, the task is expected to remain `ACTIVE` until review passes and verification is rerun.
+- Do not require `DONE` before the workflow reaches that transition point.
 - If you are unsure whether something is major or middle, choose middle.
 - Do not report speculation, stylistic preferences, or generic alternative ideas as findings.
 - For every critical or major finding, explain the concrete violated rule, evidence, or release risk.

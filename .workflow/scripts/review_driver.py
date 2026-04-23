@@ -594,6 +594,7 @@ def severity_guidance_lines(config: dict[str, Any], round_number: int) -> list[s
         "- Use critical only for clear ship blockers or correctness issues that must be fixed before completion.",
         "- Use major only when you can point to a concrete violated rule, task requirement, or release-quality risk.",
         "- If you are unsure whether something is major or middle, choose middle.",
+        "- Do not emit critical or major findings that only demand a future allowed status transition before its documented phase gate.",
         "- Use middle or minor for non-blocking improvements that are still concrete and worthwhile.",
         "- Do not report speculation, stylistic preferences, or generic alternative ideas as findings.",
         "- For every critical or major finding, explain the concrete evidence, violated rule, or release risk in details.",
@@ -620,6 +621,185 @@ def prompt_lens_lines(prompt_lens: str) -> list[str]:
         f"- {prompt_lens}",
         "- Treat this as a prioritization hint only. Keep the same evidence standard, severity thresholds, and full review scope.",
     ]
+
+
+def status_transition_review_lines(phase: str) -> list[str]:
+    lines = [
+        "Status transition rules:",
+        "- Judge status transitions against the documented workflow order, not against perceived content completeness.",
+        "- Do not require a terminal or later-phase status before the workflow explicitly allows that transition.",
+    ]
+
+    if phase == "specify-design":
+        lines.extend(
+            [
+                "- During specify-design content review, `CYCLE.md` and the matching `manifest.md` row are expected to remain `DRAFT` until explicit user approval.",
+                "- During specify-design content review, `cycle_index.md` may point to the in-progress cycle as `ACTIVE` while the cycle document remains `DRAFT`.",
+                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+            ]
+        )
+    elif phase == "investigate":
+        lines.extend(
+            [
+                "- During investigate content review, `INVESTIGATION.md` is expected to remain `DRAFT` until explicit user approval.",
+                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+            ]
+        )
+    elif phase in {"plan-tasks", "fix-tasks"}:
+        lines.extend(
+            [
+                "- During planning review, newly generated task files and `dependencies.md` rows are expected to remain `PENDING` until `/implement` starts.",
+                "- Do not require `ACTIVE` or `DONE` during `plan-tasks` or `fix-tasks` review just because the artifacts appear complete.",
+            ]
+        )
+    elif phase == "implement":
+        lines.extend(
+            [
+                "- During `review-task`, the task file and its matching `dependencies.md` row are expected to remain `ACTIVE`.",
+                "- Do not require `DONE` before review passes and the relevant verification is rerun.",
+            ]
+        )
+
+    return lines
+
+
+def phase_status_rule(phase: str, artifact_type: str, artifact_path: Path) -> tuple[str, set[str]] | None:
+    normalized_path = artifact_path.as_posix().replace("\\", "/")
+    artifact_name = artifact_path.name
+
+    if phase == "specify-design":
+        if artifact_name in {"CYCLE.md", "manifest.md"}:
+            return "DRAFT", {"FINALIZED"}
+        if artifact_name == "cycle_index.md":
+            return "ACTIVE", {"DONE", "FINALIZED"}
+
+    if phase == "investigate" and artifact_name == "INVESTIGATION.md":
+        return "DRAFT", {"FINALIZED"}
+
+    if phase in {"plan-tasks", "fix-tasks"}:
+        if artifact_name == "dependencies.md":
+            return "PENDING", {"ACTIVE", "DONE"}
+        if artifact_path.suffix == ".md" and "/tasks/" in normalized_path:
+            return "PENDING", {"ACTIVE", "DONE"}
+
+    if phase == "implement" and artifact_type == "implementation-task":
+        return "ACTIVE", {"DONE"}
+
+    return None
+
+
+def artifact_has_status(contents: str, artifact_path: Path, status: str) -> bool:
+    escaped_status = re.escape(status)
+
+    if artifact_path.name in {"CYCLE.md", "INVESTIGATION.md"}:
+        return re.search(rf"^\*\*Status\*\*:\s*`?{escaped_status}`?\s*$", contents, re.MULTILINE | re.IGNORECASE) is not None
+
+    if artifact_path.name in {"manifest.md", "dependencies.md", "cycle_index.md"}:
+        return re.search(rf"\|\s*`?{escaped_status}`?\s*\|", contents, re.IGNORECASE) is not None
+
+    if artifact_path.suffix == ".md":
+        return re.search(rf"^Status:\s*`?{escaped_status}`?\s*$", contents, re.MULTILINE | re.IGNORECASE) is not None
+
+    return False
+
+
+def finding_review_text(finding: dict[str, Any]) -> str:
+    return " ".join(
+        normalize_space(str(finding.get(key, "")))
+        for key in ["title", "details", "suggested_fix"]
+        if normalize_space(str(finding.get(key, "")))
+    ).lower()
+
+
+def finding_requests_target_status(finding: dict[str, Any], target_status: str) -> bool:
+    text = finding_review_text(finding)
+    escaped_target = re.escape(target_status.lower())
+    if target_status == "FINALIZED" and re.search(r"\bfinaliz(?:e|ed|ation)\b", text):
+        return True
+    patterns = [
+        rf"\b(?:set|mark|change|update|switch|move|transition)\b[\w\s`'-]{{0,40}}\b{escaped_target}\b",
+        rf"\b(?:should|must|need to|needs to|expected to)\b[\w\s`'-]{{0,20}}\b(?:be|become|becomes)\b[\w\s`'-]{{0,20}}\b{escaped_target}\b",
+        rf"\bstatus\b[\w\s`'-]{{0,40}}\b(?:to|as|be|become|becomes)\b[\w\s`'-]{{0,20}}\b{escaped_target}\b",
+    ]
+    return any(re.search(pattern, text) for pattern in patterns)
+
+
+def should_suppress_premature_status_finding(
+    phase: str,
+    artifact_type: str,
+    artifact_path: Path,
+    current_contents: str,
+    finding: dict[str, Any],
+) -> bool:
+    rule = phase_status_rule(phase, artifact_type, artifact_path)
+    if not rule:
+        return False
+
+    expected_status, premature_targets = rule
+    if not artifact_has_status(current_contents, artifact_path, expected_status):
+        return False
+
+    return any(finding_requests_target_status(finding, target_status) for target_status in premature_targets)
+
+
+def updated_review_summary(result: dict[str, Any]) -> str:
+    review_round = coerce_non_negative_int(result.get("review_round"))
+    max_review_turns = coerce_non_negative_int(result.get("max_review_turns"))
+    reviewers = result.get("reviewers")
+    reviewer_count = len(reviewers) if isinstance(reviewers, list) else 0
+    findings = result.get("findings")
+    advisory_findings = result.get("advisory_findings")
+    blocking_count = len(findings) if isinstance(findings, list) else 0
+    advisory_count = len(advisory_findings) if isinstance(advisory_findings, list) else 0
+    return (
+        f"Round {review_round}/{max_review_turns}: "
+        f"{reviewer_count} reviewers completed, "
+        f"{blocking_count} blocking findings, "
+        f"{advisory_count} advisory findings."
+    )
+
+
+def suppress_premature_status_findings(
+    result: dict[str, Any],
+    phase: str,
+    artifact_type: str,
+    artifact_path: Path,
+) -> dict[str, Any]:
+    if not artifact_path.exists():
+        return result
+
+    current_contents = read_text_file(artifact_path)
+    findings = result.get("findings")
+    advisory_findings = result.get("advisory_findings")
+    if not isinstance(findings, list) or not isinstance(advisory_findings, list):
+        return result
+
+    filtered_findings = [
+        finding
+        for finding in findings
+        if not (
+            isinstance(finding, dict)
+            and should_suppress_premature_status_finding(phase, artifact_type, artifact_path, current_contents, finding)
+        )
+    ]
+    filtered_advisories = [
+        finding
+        for finding in advisory_findings
+        if not (
+            isinstance(finding, dict)
+            and should_suppress_premature_status_finding(phase, artifact_type, artifact_path, current_contents, finding)
+        )
+    ]
+
+    if len(filtered_findings) == len(findings) and len(filtered_advisories) == len(advisory_findings):
+        return result
+
+    updated = dict(result)
+    updated["findings"] = filtered_findings
+    updated["advisory_findings"] = filtered_advisories
+    updated["approved"] = len(filtered_findings) == 0
+    updated["summary"] = updated_review_summary(updated)
+    return updated
 
 
 def plan_tasks_cycle_doc_path(root: Path, artifact_path: Path) -> Path | None:
@@ -692,6 +872,7 @@ def document_prompt(
     ]
     if prompt_lens:
         prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
+    prompt_lines.extend(["", *status_transition_review_lines(phase)])
     prompt_lines.extend(["", *docs_first_review_lines(primary_source)])
     prompt_lines.extend(
         [
@@ -752,6 +933,7 @@ def implementation_prompt(
     ]
     if prompt_lens:
         prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
+    prompt_lines.extend(["", *status_transition_review_lines("implement")])
     prompt_lines.extend(["", *docs_first_review_lines("the task file and the provided workflow references")])
     prompt_lines.extend(["", *severity_guidance_lines(config, round_number)])
     prompt_lines.extend(
@@ -1172,6 +1354,7 @@ def run_codex_parallel(
         raw_log_paths=raw_log_paths,
         reviewer_profiles=[cast(dict[str, Any], reviewer_request["profile"]) for reviewer_request in reviewer_requests],
     )
+    merged = suppress_premature_status_findings(merged, phase, artifact_type, Path(artifact_path))
     write_json_file(output_path, merged)
     return True, merged, ""
 

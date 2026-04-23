@@ -67,6 +67,7 @@ Review invariants:
 - reuse one canonical review log file per command invocation and overwrite it on each review iteration
 - reviewer-specific raw logs may be written alongside the canonical log as transient diagnostics
 - never finalize a document, mark a task `DONE`, or create a reviewed implementation commit while blocking findings remain
+- during review, treat the phase-defined in-progress status as correct (`DRAFT`, `PENDING`, or `ACTIVE` as applicable); do not block only because a later status transition has not happened yet
 - for implementation reviews, include the full task file contents and verify tests, implementation, refactor, verify commands, and done condition against that task
 - one review round launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
 - every reviewer in a round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them

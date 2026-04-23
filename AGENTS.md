@@ -10,6 +10,8 @@ Read `.workflow/project_context.md` for repository-specific build, test, archite
 - `/investigate`
 - `/fix-tasks`
 
+`/specify-design` starts with `grill-me` inside the phase. `grill-me` is not a separate workflow phase.
+
 Main flow: `INIT -> SPECIFY-DESIGN -> PLAN-TASKS -> IMPLEMENT`
 
 Bug flow: `INVESTIGATE -> FIX-TASKS -> IMPLEMENT`
@@ -46,7 +48,7 @@ Statuses:
 Every workflow artifact and every implementation task must complete this loop before it is treated as complete:
 
 1. create or implement the artifact
-2. initialize review state at the start of the workflow invocation
+2. initialize review state at the start of artifact creation for that workflow step; for `specify-design`, do this only immediately before the first `CYCLE.md` draft-side effect after `grill-me`
 3. if the user provides manual review feedback, asks for re-review after a prior completion, or explicitly asks to reset review rounds, re-initialize review state before the next workflow review
 4. run one read-only `codex exec` review round
 5. validate findings before applying them

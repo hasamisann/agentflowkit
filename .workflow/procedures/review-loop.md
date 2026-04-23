@@ -9,7 +9,7 @@ Do not treat an artifact as complete until the merged `codex exec` review report
 ## Required Loop
 
 1. Create or implement the artifact.
-2. At the start of each workflow invocation, initialize the review state for that phase.
+2. At the start of artifact creation for that phase, initialize the review state for that phase.
 3. If the user provides manual review feedback, asks for re-review after a prior completion, or explicitly asks to reset review rounds, re-initialize the review state before the next workflow review.
 4. Run one read-only Codex review round for that artifact.
 5. Validate the findings before applying them:
@@ -43,13 +43,14 @@ The driver streams reviewer-specific prompts over stdin, inlines document conten
 
 ### Prepare a document-phase review
 
-Run this at the start of a command invocation so the review log path, target scope, and review-round counters are reset:
+Run this at the start of artifact creation for the command invocation so the review log path, target scope, and review-round counters are reset:
 
 ```bash
 python ".workflow/scripts/review_driver.py" prepare --tool opencode --phase plan-tasks --arguments "$ARGUMENTS"
 ```
 
 For Claude skills, pass `${CLAUDE_SESSION_ID}` so each skill invocation gets its own state file.
+For `specify-design`, artifact creation starts only when the workflow begins drafting `CYCLE.md` after `grill-me`, so do not run `prepare` during grill-me-only turns.
 Re-run the same `prepare` command before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
 
 ### Finish a document-phase review

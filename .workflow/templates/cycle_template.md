@@ -59,6 +59,18 @@
 | Enabled | Yes/No |
 | Triggers | pull_request, push to default branch |
 
+## Resolved Decisions
+
+<!-- Index every non-trivial downstream-constraining decision here, including explicit deferred or delegated decisions. Reflect each decision again in the relevant sections below instead of treating this section as the only source of truth. -->
+
+### RD-001: [Decision Title]
+
+- Decision: [What question was resolved]
+- Chosen Option: [Chosen option or explicit deferred/delegated decision]
+- Rationale: [Why this option won]
+- Rejected Alternatives: [Relevant alternatives and why they were not chosen]
+- Downstream Impact: [How this constrains architecture, tasks, tests, CI, or later decisions]
+
 ## Architecture
 
 ### Overview
@@ -87,5 +99,7 @@
 | Integration | [Scope] | [Notes] |
 
 ## Open Questions
+
+<!-- Leave this empty or state none when grill-me has resolved or intentionally deferred every downstream-impacting issue. Do not use this section for decisions already captured in Resolved Decisions. -->
 
 - [ ]

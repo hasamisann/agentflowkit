@@ -1,9 +1,22 @@
 model = "gpt-5.4"
 sandbox = "read-only"
-model_reasoning_effort = "xhigh"
 output_schema = ".workflow/review/codex-review-schema.json"
 prompt_transport = "stdin"
 document_review_mode = "inline-artifact"
 parallel_reviews = 3
 max_review_turns = 10
 blocking_severities = ["critical", "major"]
+
+[[reviewer_profiles]]
+label = "baseline-high"
+model_reasoning_effort = "high"
+
+[[reviewer_profiles]]
+label = "baseline-xhigh"
+model_reasoning_effort = "xhigh"
+
+[[reviewer_profiles]]
+label = "edge-state-verify-high"
+model_reasoning_effort = "high"
+document_prompt_lens = "Prioritize edge-case workflow violations, status transitions, missing dependencies or phase gates, and verify completeness first. Keep the same evidence standard and still report any other concrete findings."
+implementation_prompt_lens = "Prioritize invalid state transitions, queued or pending or cleanup coverage gaps, verify-command completeness, and done-condition evidence first. Keep the same evidence standard and still report any other concrete findings."

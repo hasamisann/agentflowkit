@@ -56,7 +56,8 @@ INVESTIGATE -> FIX-TASKS -> IMPLEMENT
 - 1 コマンド実行につき 1 canonical review log を使い、同じコマンド中の反復レビューではそのファイルを上書きする
 - reviewer 別 raw log は補助診断用として同じディレクトリに一時出力してよい
 - 実装レビューでは task file 全文も prompt に含める
-- 1 review round は同一 prompt の `codex exec` を並列に 3 本走らせ、その結果を統合して扱う
+- 1 review round は共通参照を含む reviewer 別 prompt の `codex exec` を並列に 3 本走らせ、その結果を統合して扱う
+- reviewer ごとに `reasoning_effort` と document / implementation 用 lens を変えられるが、docs-first review と source-of-truth ルールは全 reviewer で共通
 - 各 reviewer はまず docs-first review を行い、その後で通常 review を行う
 - 提供された docs は review の source of truth とし、それと矛盾する finding や修正提案は出してはならない
 - `plan-tasks` の review では active cycle の `CYCLE.md` を必須参照として prompt に含める

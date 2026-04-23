@@ -111,6 +111,15 @@ def require_string(config: dict[str, Any], key: str) -> str:
     return value.strip()
 
 
+def optional_string(config: dict[str, Any], key: str) -> str | None:
+    value = config.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError(f"Review config key '{key}' must be a non-empty string when present.")
+    return value.strip()
+
+
 def require_positive_int(config: dict[str, Any], key: str, default: int) -> int:
     value = config.get(key, default)
     if not isinstance(value, int) or value <= 0:
@@ -138,6 +147,49 @@ def require_severity_list(config: dict[str, Any], key: str, default: list[str]) 
     return normalized
 
 
+def normalize_reviewer_profiles(
+    raw_profiles: Any,
+    parallel_reviews: int,
+    fallback_effort: str | None,
+) -> list[dict[str, Any]]:
+    if raw_profiles is None:
+        if not fallback_effort:
+            raise ValueError(
+                "Review config must define 'reviewer_profiles' or top-level 'model_reasoning_effort'."
+            )
+        return [
+            {
+                "label": f"reviewer-{index}",
+                "model_reasoning_effort": fallback_effort,
+                "document_prompt_lens": None,
+                "implementation_prompt_lens": None,
+            }
+            for index in range(1, parallel_reviews + 1)
+        ]
+
+    if not isinstance(raw_profiles, list) or not raw_profiles:
+        raise ValueError("Review config key 'reviewer_profiles' must be a non-empty array when present.")
+    if len(raw_profiles) != parallel_reviews:
+        raise ValueError(
+            "Review config key 'reviewer_profiles' must contain exactly "
+            f"{parallel_reviews} entries to match 'parallel_reviews'."
+        )
+
+    normalized: list[dict[str, Any]] = []
+    for index, profile in enumerate(raw_profiles, start=1):
+        if not isinstance(profile, dict):
+            raise ValueError(f"Review config reviewer_profiles[{index}] must be a table/object.")
+        normalized.append(
+            {
+                "label": require_string(profile, "label"),
+                "model_reasoning_effort": require_string(profile, "model_reasoning_effort"),
+                "document_prompt_lens": optional_string(profile, "document_prompt_lens"),
+                "implementation_prompt_lens": optional_string(profile, "implementation_prompt_lens"),
+            }
+        )
+    return normalized
+
+
 def load_review_config(root: Path) -> dict[str, Any]:
     config_path = root / REVIEW_CONFIG_PATH
     if not config_path.exists():
@@ -153,13 +205,14 @@ def load_review_config(root: Path) -> dict[str, Any]:
         raise ValueError("Review config key 'model' must be a non-empty string when present.")
 
     sandbox = require_string(raw, "sandbox")
-    model_reasoning_effort = require_string(raw, "model_reasoning_effort")
+    model_reasoning_effort = optional_string(raw, "model_reasoning_effort")
     output_schema = require_string(raw, "output_schema")
     prompt_transport = require_string(raw, "prompt_transport")
     document_review_mode = require_string(raw, "document_review_mode")
     parallel_reviews = require_positive_int(raw, "parallel_reviews", DEFAULT_PARALLEL_REVIEWS)
     max_review_turns = require_positive_int(raw, "max_review_turns", DEFAULT_MAX_REVIEW_TURNS)
     blocking_severities = require_severity_list(raw, "blocking_severities", DEFAULT_BLOCKING_SEVERITIES)
+    reviewer_profiles = normalize_reviewer_profiles(raw.get("reviewer_profiles"), parallel_reviews, model_reasoning_effort)
 
     if prompt_transport not in SUPPORTED_PROMPT_TRANSPORTS:
         raise ValueError(
@@ -185,6 +238,7 @@ def load_review_config(root: Path) -> dict[str, Any]:
         "parallel_reviews": parallel_reviews,
         "max_review_turns": max_review_turns,
         "blocking_severities": blocking_severities,
+        "reviewer_profiles": reviewer_profiles,
         "config_path": config_path.resolve(),
     }
 
@@ -560,6 +614,14 @@ def docs_first_review_lines(primary_source: str) -> list[str]:
     ]
 
 
+def prompt_lens_lines(prompt_lens: str) -> list[str]:
+    return [
+        "Priority review lens:",
+        f"- {prompt_lens}",
+        "- Treat this as a prioritization hint only. Keep the same evidence standard, severity thresholds, and full review scope.",
+    ]
+
+
 def plan_tasks_cycle_doc_path(root: Path, artifact_path: Path) -> Path | None:
     try:
         relative_artifact = artifact_path.resolve().relative_to(root.resolve())
@@ -580,7 +642,14 @@ def plan_tasks_cycle_doc_path(root: Path, artifact_path: Path) -> Path | None:
     return candidate if candidate.exists() else None
 
 
-def document_prompt(root: Path, phase: str, artifact_path: Path, config: dict[str, Any], round_number: int) -> str:
+def document_prompt(
+    root: Path,
+    phase: str,
+    artifact_path: Path,
+    config: dict[str, Any],
+    round_number: int,
+    prompt_lens: str | None = None,
+) -> str:
     if config["document_review_mode"] != "inline-artifact":
         raise ValueError(
             "Document review mode must be 'inline-artifact' for workflow document reviews. "
@@ -621,6 +690,8 @@ def document_prompt(root: Path, phase: str, artifact_path: Path, config: dict[st
         "- Return only concrete findings that are actionable.",
         "- If evidence is incomplete or uncertain, do not guess.",
     ]
+    if prompt_lens:
+        prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
     prompt_lines.extend(["", *docs_first_review_lines(primary_source)])
     prompt_lines.extend(
         [
@@ -650,7 +721,13 @@ def document_prompt(root: Path, phase: str, artifact_path: Path, config: dict[st
     return "\n".join(prompt_lines)
 
 
-def implementation_prompt(root: Path, task_path: Path, config: dict[str, Any], round_number: int) -> str:
+def implementation_prompt(
+    root: Path,
+    task_path: Path,
+    config: dict[str, Any],
+    round_number: int,
+    prompt_lens: str | None = None,
+) -> str:
     prompt_lines = [
         f"Review the implementation associated with task file {task_path.as_posix()}.",
         "",
@@ -673,6 +750,8 @@ def implementation_prompt(root: Path, task_path: Path, config: dict[str, Any], r
         "- Do not invent missing evidence. If the repository state does not support a claim, do not report it.",
         "- If a general review instinct conflicts with the task file, treat the task file as authoritative and do not emit that conflicting finding.",
     ]
+    if prompt_lens:
+        prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
     prompt_lines.extend(["", *docs_first_review_lines("the task file and the provided workflow references")])
     prompt_lines.extend(["", *severity_guidance_lines(config, round_number)])
     prompt_lines.extend(
@@ -700,6 +779,54 @@ def implementation_prompt(root: Path, task_path: Path, config: dict[str, Any], r
     return "\n".join(prompt_lines)
 
 
+def build_document_reviewer_requests(
+    root: Path,
+    phase: str,
+    artifact_path: Path,
+    config: dict[str, Any],
+    round_number: int,
+) -> list[dict[str, Any]]:
+    requests: list[dict[str, Any]] = []
+    for reviewer_profile in cast(list[dict[str, Any]], config["reviewer_profiles"]):
+        requests.append(
+            {
+                "profile": reviewer_profile,
+                "prompt": document_prompt(
+                    root,
+                    phase,
+                    artifact_path,
+                    config,
+                    round_number,
+                    cast(str | None, reviewer_profile.get("document_prompt_lens")),
+                ),
+            }
+        )
+    return requests
+
+
+def build_implementation_reviewer_requests(
+    root: Path,
+    task_path: Path,
+    config: dict[str, Any],
+    round_number: int,
+) -> list[dict[str, Any]]:
+    requests: list[dict[str, Any]] = []
+    for reviewer_profile in cast(list[dict[str, Any]], config["reviewer_profiles"]):
+        requests.append(
+            {
+                "profile": reviewer_profile,
+                "prompt": implementation_prompt(
+                    root,
+                    task_path,
+                    config,
+                    round_number,
+                    cast(str | None, reviewer_profile.get("implementation_prompt_lens")),
+                ),
+            }
+        )
+    return requests
+
+
 def write_failure_logs(output_path: Path, stdout_text: str, stderr_text: str) -> tuple[Path, Path]:
     stdout_log = output_path.parent / f"{output_path.stem}.stdout.log"
     stderr_log = output_path.parent / f"{output_path.stem}.stderr.log"
@@ -718,7 +845,12 @@ def resolve_codex_binary() -> str | None:
     return shutil.which("codex") or shutil.which("codex.cmd") or shutil.which("codex.exe")
 
 
-def build_codex_command(codex_bin: str, config: dict[str, Any], output_path: Path) -> list[str]:
+def build_codex_command(
+    codex_bin: str,
+    config: dict[str, Any],
+    output_path: Path,
+    reviewer_profile: dict[str, Any],
+) -> list[str]:
     cmd = [codex_bin, "exec"]
     if config["model"]:
         cmd.extend(["--model", config["model"]])
@@ -728,7 +860,7 @@ def build_codex_command(codex_bin: str, config: dict[str, Any], output_path: Pat
             "--sandbox",
             config["sandbox"],
             "-c",
-            f'model_reasoning_effort="{config["model_reasoning_effort"]}"',
+            f'model_reasoning_effort="{reviewer_profile["model_reasoning_effort"]}"',
             "--output-schema",
             str(config["output_schema_path"]),
             "-o",
@@ -748,19 +880,21 @@ def run_codex_once(
     prompt: str,
     output_path: Path,
     config: dict[str, Any],
+    reviewer_profile: dict[str, Any],
     codex_bin: str,
     reviewer_index: int,
     reviewer_count: int,
 ) -> tuple[bool, dict[str, Any] | None, str]:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     env = os.environ.copy()
+    reviewer_label = str(reviewer_profile.get("label", f"reviewer-{reviewer_index}")).strip() or f"reviewer-{reviewer_index}"
 
     try:
-        cmd = build_codex_command(codex_bin, config, output_path)
+        cmd = build_codex_command(codex_bin, config, output_path, reviewer_profile)
     except ValueError as exc:
         return False, None, str(exc)
 
-    eprint(f"[review] reviewer {reviewer_index}/{reviewer_count}: starting")
+    eprint(f"[review] reviewer {reviewer_index}/{reviewer_count} ({reviewer_label}): starting")
     result = subprocess.run(
         cmd,
         cwd=root,
@@ -779,7 +913,9 @@ def run_codex_once(
         return (
             False,
             None,
-            f"reviewer {reviewer_index} failed: {stderr}\nFailure logs: {stdout_log.as_posix()}, {stderr_log.as_posix()}",
+            "reviewer "
+            f"{reviewer_index} ({reviewer_label}) failed: {stderr}\nFailure logs: "
+            f"{stdout_log.as_posix()}, {stderr_log.as_posix()}",
         )
 
     if not output_path.exists():
@@ -788,7 +924,7 @@ def run_codex_once(
             False,
             None,
             "reviewer "
-            f"{reviewer_index} completed without producing a review log. Failure logs: "
+            f"{reviewer_index} ({reviewer_label}) completed without producing a review log. Failure logs: "
             f"{stdout_log.as_posix()}, {stderr_log.as_posix()}",
         )
 
@@ -799,7 +935,9 @@ def run_codex_once(
         return (
             False,
             None,
-            f"reviewer {reviewer_index} returned invalid JSON: {exc}. Failure logs: {stdout_log.as_posix()}, {stderr_log.as_posix()}",
+            "reviewer "
+            f"{reviewer_index} ({reviewer_label}) returned invalid JSON: {exc}. Failure logs: "
+            f"{stdout_log.as_posix()}, {stderr_log.as_posix()}",
         )
     if not isinstance(data, dict):
         stdout_log, stderr_log = write_failure_logs(output_path, result.stdout or "", result.stderr or "")
@@ -807,12 +945,12 @@ def run_codex_once(
             False,
             None,
             "reviewer "
-            f"{reviewer_index} review log did not contain an object. Failure logs: "
+            f"{reviewer_index} ({reviewer_label}) review log did not contain an object. Failure logs: "
             f"{stdout_log.as_posix()}, {stderr_log.as_posix()}",
         )
 
     clear_failure_logs(output_path)
-    eprint(f"[review] reviewer {reviewer_index}/{reviewer_count}: completed")
+    eprint(f"[review] reviewer {reviewer_index}/{reviewer_count} ({reviewer_label}): completed")
     return True, data, ""
 
 
@@ -872,15 +1010,21 @@ def merge_review_results(
     review_round: int,
     config: dict[str, Any],
     raw_log_paths: list[Path],
+    reviewer_profiles: list[dict[str, Any]],
 ) -> dict[str, Any]:
     merged_findings: dict[tuple[str, str, str], dict[str, Any]] = {}
     reviewers: list[dict[str, Any]] = []
 
     for reviewer_index, result in enumerate(raw_results, start=1):
         reviewer_findings = result.get("findings", [])
+        reviewer_profile = reviewer_profiles[reviewer_index - 1]
         reviewers.append(
             {
                 "reviewer_index": reviewer_index,
+                "label": str(reviewer_profile.get("label", "")).strip() or None,
+                "model_reasoning_effort": str(reviewer_profile.get("model_reasoning_effort", "")).strip() or None,
+                "document_prompt_lens": cast(str | None, reviewer_profile.get("document_prompt_lens")),
+                "implementation_prompt_lens": cast(str | None, reviewer_profile.get("implementation_prompt_lens")),
                 "approved": bool(result.get("approved", False)),
                 "summary": str(result.get("summary", "")).strip(),
                 "raw_log_path": raw_log_paths[reviewer_index - 1].as_posix(),
@@ -953,7 +1097,7 @@ def merge_review_results(
 
 def run_codex_parallel(
     root: Path,
-    prompt: str,
+    reviewer_requests: list[dict[str, Any]],
     output_path: Path,
     config: dict[str, Any],
     phase: str,
@@ -966,6 +1110,13 @@ def run_codex_parallel(
     codex_bin = resolve_codex_binary()
     if not codex_bin:
         return False, None, "codex executable was not found in PATH"
+    if len(reviewer_requests) != config["parallel_reviews"]:
+        return (
+            False,
+            None,
+            "Reviewer request count does not match 'parallel_reviews': "
+            f"expected {config['parallel_reviews']}, got {len(reviewer_requests)}",
+        )
 
     raw_log_paths = [reviewer_output_path(output_path, index) for index in range(1, config["parallel_reviews"] + 1)]
     raw_results: list[dict[str, Any] | None] = [None] * config["parallel_reviews"]
@@ -977,19 +1128,21 @@ def run_codex_parallel(
     )
 
     with concurrent.futures.ThreadPoolExecutor(max_workers=config["parallel_reviews"]) as executor:
-        futures = {
-            executor.submit(
-                run_codex_once,
-                root,
-                prompt,
-                raw_log_paths[index - 1],
-                config,
-                codex_bin,
-                index,
-                config["parallel_reviews"],
-            ): index
-            for index in range(1, config["parallel_reviews"] + 1)
-        }
+        futures = {}
+        for index, reviewer_request in enumerate(reviewer_requests, start=1):
+            futures[
+                executor.submit(
+                    run_codex_once,
+                    root,
+                    str(reviewer_request["prompt"]),
+                    raw_log_paths[index - 1],
+                    config,
+                    cast(dict[str, Any], reviewer_request["profile"]),
+                    codex_bin,
+                    index,
+                    config["parallel_reviews"],
+                )
+            ] = index
 
         for future in concurrent.futures.as_completed(futures):
             reviewer_index = futures[future]
@@ -1017,6 +1170,7 @@ def run_codex_parallel(
         review_round=review_round,
         config=config,
         raw_log_paths=raw_log_paths,
+        reviewer_profiles=[cast(dict[str, Any], reviewer_request["profile"]) for reviewer_request in reviewer_requests],
     )
     write_json_file(output_path, merged)
     return True, merged, ""
@@ -1295,14 +1449,14 @@ def handle_finish(args: argparse.Namespace) -> int:
             return return_finish_result(limit_message, args.hook_event)
 
         try:
-            prompt = document_prompt(root, args.phase, artifact, config, next_round)
+            reviewer_requests = build_document_reviewer_requests(root, args.phase, artifact, config, next_round)
         except ValueError as exc:
             message = str(exc)
             return return_finish_result(message, args.hook_event)
 
         ok, result, error_message = run_codex_parallel(
             root,
-            prompt,
+            reviewer_requests,
             review_log,
             config,
             phase=args.phase,
@@ -1370,10 +1524,10 @@ def handle_review_task(args: argparse.Namespace) -> int:
         return 1
 
     review_log = log_path(root, args.tool, "implement", args.session_id)
-    prompt = implementation_prompt(root, task_path, config, next_round)
+    reviewer_requests = build_implementation_reviewer_requests(root, task_path, config, next_round)
     ok, result, error_message = run_codex_parallel(
         root,
-        prompt,
+        reviewer_requests,
         review_log,
         config,
         phase="implement",

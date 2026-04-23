@@ -23,7 +23,7 @@ Do not treat an artifact as complete until the merged `codex exec` review report
 9. Repeat until the merged review result contains no blocking findings or the target reaches the maximum review turn count.
 10. If the review turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
 
-One review round means the driver launches the configured parallel reviewers with the same prompt, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
+One review round means the driver launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
 The provided documents are the source of truth for the round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
 
 ## Required Codex Settings
@@ -39,7 +39,7 @@ The provided documents are the source of truth for the round. Reviewers must not
 
 Use `.workflow/scripts/review_driver.py` instead of hand-assembling review commands.
 Do not invoke `codex exec` directly for workflow reviews.
-The driver streams prompts over stdin, inlines document contents for document-phase reviews, fans each review round out to the configured parallel reviewer count, merges the results, and records diagnostics under `logs/reviews/`.
+The driver streams reviewer-specific prompts over stdin, inlines document contents for document-phase reviews, fans each review round out to the configured parallel reviewer count, applies each reviewer's configured reasoning effort and prompt lens, merges the results, and records diagnostics under `logs/reviews/`.
 
 ### Prepare a document-phase review
 

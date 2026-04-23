@@ -114,13 +114,26 @@ class ReviewDriverTestCase(unittest.TestCase):
                 [
                     'model = "gpt-5.4"',
                     'sandbox = "read-only"',
-                    'model_reasoning_effort = "xhigh"',
                     'output_schema = ".workflow/review/codex-review-schema.json"',
                     'prompt_transport = "stdin"',
                     'document_review_mode = "inline-artifact"',
                     'parallel_reviews = 3',
                     'max_review_turns = 10',
                     'blocking_severities = ["critical", "major"]',
+                    '',
+                    '[[reviewer_profiles]]',
+                    'label = "baseline-high"',
+                    'model_reasoning_effort = "high"',
+                    '',
+                    '[[reviewer_profiles]]',
+                    'label = "baseline-xhigh"',
+                    'model_reasoning_effort = "xhigh"',
+                    '',
+                    '[[reviewer_profiles]]',
+                    'label = "edge-state-verify-high"',
+                    'model_reasoning_effort = "high"',
+                    'document_prompt_lens = "Prioritize edge-case workflow violations and verify completeness first."',
+                    'implementation_prompt_lens = "Prioritize invalid state transitions and done-condition evidence first."',
                     "",
                 ]
             ),
@@ -137,12 +150,91 @@ class ReviewDriverTestCase(unittest.TestCase):
 
 
 class LoadReviewConfigTests(ReviewDriverTestCase):
-    def test_load_review_config_reads_parallel_settings(self) -> None:
+    def test_load_review_config_reads_parallel_settings_and_profiles(self) -> None:
         config = review_driver.load_review_config(self.root)
 
         self.assertEqual(config["parallel_reviews"], 3)
         self.assertEqual(config["max_review_turns"], 10)
         self.assertEqual(config["blocking_severities"], ["critical", "major"])
+        self.assertEqual(
+            [profile["label"] for profile in config["reviewer_profiles"]],
+            ["baseline-high", "baseline-xhigh", "edge-state-verify-high"],
+        )
+        self.assertEqual(
+            [profile["model_reasoning_effort"] for profile in config["reviewer_profiles"]],
+            ["high", "xhigh", "high"],
+        )
+
+    def test_load_review_config_falls_back_to_top_level_effort(self) -> None:
+        write_file(
+            self.root / ".workflow" / "config" / "codex-review.toml",
+            "\n".join(
+                [
+                    'model = "gpt-5.4"',
+                    'sandbox = "read-only"',
+                    'model_reasoning_effort = "xhigh"',
+                    'output_schema = ".workflow/review/codex-review-schema.json"',
+                    'prompt_transport = "stdin"',
+                    'document_review_mode = "inline-artifact"',
+                    'parallel_reviews = 3',
+                    'max_review_turns = 10',
+                    'blocking_severities = ["critical", "major"]',
+                    '',
+                ]
+            ),
+        )
+
+        config = review_driver.load_review_config(self.root)
+
+        self.assertEqual(config["model_reasoning_effort"], "xhigh")
+        self.assertEqual(len(config["reviewer_profiles"]), 3)
+        self.assertEqual(
+            [profile["label"] for profile in config["reviewer_profiles"]],
+            ["reviewer-1", "reviewer-2", "reviewer-3"],
+        )
+        self.assertTrue(all(profile["model_reasoning_effort"] == "xhigh" for profile in config["reviewer_profiles"]))
+
+    def test_load_review_config_rejects_profile_count_mismatch(self) -> None:
+        write_file(
+            self.root / ".workflow" / "config" / "codex-review.toml",
+            "\n".join(
+                [
+                    'model = "gpt-5.4"',
+                    'sandbox = "read-only"',
+                    'output_schema = ".workflow/review/codex-review-schema.json"',
+                    'prompt_transport = "stdin"',
+                    'document_review_mode = "inline-artifact"',
+                    'parallel_reviews = 3',
+                    'max_review_turns = 10',
+                    'blocking_severities = ["critical", "major"]',
+                    '',
+                    '[[reviewer_profiles]]',
+                    'label = "baseline-high"',
+                    'model_reasoning_effort = "high"',
+                    '',
+                    '[[reviewer_profiles]]',
+                    'label = "baseline-xhigh"',
+                    'model_reasoning_effort = "xhigh"',
+                    '',
+                ]
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "parallel_reviews"):
+            review_driver.load_review_config(self.root)
+
+
+class BuildCodexCommandTests(ReviewDriverTestCase):
+    def test_build_codex_command_uses_reviewer_profile_effort(self) -> None:
+        config = review_driver.load_review_config(self.root)
+        commands = [
+            review_driver.build_codex_command("codex", config, Path("review.json"), profile)
+            for profile in config["reviewer_profiles"]
+        ]
+
+        self.assertIn('model_reasoning_effort="high"', commands[0])
+        self.assertIn('model_reasoning_effort="xhigh"', commands[1])
+        self.assertIn('model_reasoning_effort="high"', commands[2])
 
 
 class MergeReviewResultsTests(unittest.TestCase):
@@ -152,6 +244,26 @@ class MergeReviewResultsTests(unittest.TestCase):
             "max_review_turns": 10,
             "blocking_severities": ["critical", "major"],
         }
+        reviewer_profiles = [
+            {
+                "label": "baseline-high",
+                "model_reasoning_effort": "high",
+                "document_prompt_lens": None,
+                "implementation_prompt_lens": None,
+            },
+            {
+                "label": "baseline-xhigh",
+                "model_reasoning_effort": "xhigh",
+                "document_prompt_lens": None,
+                "implementation_prompt_lens": None,
+            },
+            {
+                "label": "edge-state-verify-high",
+                "model_reasoning_effort": "high",
+                "document_prompt_lens": "document lens",
+                "implementation_prompt_lens": "implementation lens",
+            },
+        ]
         raw_results = [
             {
                 "approved": False,
@@ -198,6 +310,7 @@ class MergeReviewResultsTests(unittest.TestCase):
             review_round=1,
             config=config,
             raw_log_paths=[Path("r1.json"), Path("r2.json"), Path("r3.json")],
+            reviewer_profiles=reviewer_profiles,
         )
 
         self.assertFalse(result["approved"])
@@ -207,16 +320,21 @@ class MergeReviewResultsTests(unittest.TestCase):
         self.assertEqual(result["findings"][0]["reviewer_indexes"], [1, 2])
         self.assertEqual(len(result["advisory_findings"]), 1)
         self.assertEqual(result["advisory_findings"][0]["severity"], "minor")
+        self.assertEqual(result["reviewers"][1]["label"], "baseline-xhigh")
+        self.assertEqual(result["reviewers"][1]["model_reasoning_effort"], "xhigh")
+        self.assertEqual(result["reviewers"][2]["document_prompt_lens"], "document lens")
+        self.assertEqual(result["reviewers"][2]["implementation_prompt_lens"], "implementation lens")
 
 
 class PromptConstructionTests(ReviewDriverTestCase):
-    def test_plan_tasks_prompt_includes_cycle_doc_and_docs_first_rules(self) -> None:
+    def test_plan_tasks_prompt_includes_cycle_doc_docs_first_rules_and_document_lens(self) -> None:
         cycle_doc, _, _ = create_cycle_artifacts(self.root)
         artifact_path = self.root / ".workflow" / "project_context.md"
         write_file(artifact_path, "# Project Context\n")
 
         config = review_driver.load_review_config(self.root)
-        prompt = review_driver.document_prompt(self.root, "plan-tasks", artifact_path, config, 1)
+        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "plan-tasks", artifact_path, config, 1)
+        prompt = reviewer_requests[2]["prompt"]
 
         self.assertIn(review_driver.read_text_file(cycle_doc), prompt)
         self.assertIn("Review order:", prompt)
@@ -226,13 +344,18 @@ class PromptConstructionTests(ReviewDriverTestCase):
         )
         self.assertIn("Do not report findings or suggested fixes that conflict with the provided documents.", prompt)
         self.assertIn("The artifact complies with the active cycle design and requirements in CYCLE.md.", prompt)
+        self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
+        self.assertNotIn("Priority review lens:", reviewer_requests[1]["prompt"])
+        self.assertIn("Priority review lens:", prompt)
+        self.assertIn(config["reviewer_profiles"][2]["document_prompt_lens"], prompt)
 
-    def test_implementation_prompt_uses_task_file_as_source_of_truth(self) -> None:
+    def test_implementation_prompt_uses_task_file_as_source_of_truth_and_implementation_lens(self) -> None:
         task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
         write_file(task_path, "# Task\n\n## Done\n\n- done\n")
 
         config = review_driver.load_review_config(self.root)
-        prompt = review_driver.implementation_prompt(self.root, task_path, config, 1)
+        reviewer_requests = review_driver.build_implementation_reviewer_requests(self.root, task_path, config, 1)
+        prompt = reviewer_requests[2]["prompt"]
 
         self.assertIn("Treat the task file as the source of truth for task-specific requirements in this review.", prompt)
         self.assertIn(
@@ -245,6 +368,10 @@ class PromptConstructionTests(ReviewDriverTestCase):
         )
         self.assertIn("Reference: .workflow/procedures/implement.md", prompt)
         self.assertIn(review_driver.read_text_file(task_path), prompt)
+        self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
+        self.assertNotIn("Priority review lens:", reviewer_requests[1]["prompt"])
+        self.assertIn("Priority review lens:", prompt)
+        self.assertIn(config["reviewer_profiles"][2]["implementation_prompt_lens"], prompt)
 
 
 class RoundTrackingTests(ReviewDriverTestCase):

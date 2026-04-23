@@ -66,7 +66,7 @@ Review invariants:
 - reviewer-specific raw logs may be written alongside the canonical log as transient diagnostics
 - never finalize a document or commit a task while blocking findings remain
 - for implementation reviews, include the full task file contents and verify tests, implementation, refactor, verify commands, and done condition against that task
-- one review round launches the configured parallel reviewers and merges their results into the canonical review result
+- one review round launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
 - every reviewer in a round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them
 - for `plan-tasks` document reviews, include the active cycle `CYCLE.md` as a required reference
 - for implementation reviews, treat the task file as the source of truth for task-specific requirements

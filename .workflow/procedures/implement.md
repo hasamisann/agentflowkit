@@ -37,17 +37,17 @@ Implement one task or every task in one requested wave.
     - if a blocking finding appears incorrect or ambiguous, ask the user before changing the implementation
 12. Repeat the review loop until the task has no blocking findings or reaches the configured review turn limit.
 13. Re-run the relevant verification after review-driven fixes.
-14. Commit exactly once using the predefined commit message.
-15. Mark the task `DONE`.
-16. Mark the matching `dependencies.md` row `DONE`.
+14. Mark the task `DONE`.
+15. Mark the matching `dependencies.md` row `DONE`.
 
 ## Rules
 
 - A wave run is still one task at a time. Complete the full lifecycle for task A before task B.
-- Do not combine multiple tasks in one commit.
 - Do not commit workflow files unless the user explicitly asks.
 - Do not push.
-- If a verify command fails, fix it before review or commit.
+- If a verify command fails, fix it before review or marking the task `DONE`.
+- A task may be marked `DONE` without creating a commit.
+- If the user explicitly asks for a commit, create it only after the task has no blocking review findings.
 - If the review turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
 - If one task in a wave fails, stop and report before attempting later tasks in the same wave.
 - Review findings must not contradict the task file or the provided workflow documents; if those documents conflict, report the conflict explicitly.

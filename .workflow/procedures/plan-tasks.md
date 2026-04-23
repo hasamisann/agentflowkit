@@ -20,7 +20,7 @@ Break one finalized cycle document into atomic implementation tasks.
 10. Create `.spec/cycles/<cycle>/tasks/` if it does not exist.
 11. Determine the next task numbers by checking the actual filesystem contents of that `tasks/` directory.
 12. Create one task file per atomic unit using `.workflow/templates/task_template.md`.
-13. Each task must be independently implementable, testable, and commit-ready.
+13. Each task must be independently implementable, testable, and reviewable.
 14. Replace all placeholders and example values in every task file before presenting them.
 15. Create `dependencies.md` from `.workflow/templates/dependencies_template.md`.
 16. Add exactly one row per task file and assign wave, dependency list, and initial `PENDING` status.
@@ -30,7 +30,7 @@ Break one finalized cycle document into atomic implementation tasks.
 
 ## Rules
 
-- Keep tasks small enough for one TDD cycle and one atomic commit.
+- Keep tasks small enough for one TDD cycle and one focused review loop.
 - Prefer clear dependency waves over vague ordering.
 - If a task list is too large, split by architecture boundary rather than by file type alone.
 - `dependencies.md` is the task execution index used by `/implement wave <N>` and must stay synchronized with task-file status.

@@ -11,6 +11,6 @@ If the latest user input supplies manual review feedback, asks for re-review, or
 
 Then execute `.workflow/procedures/implement.md` exactly.
 
-For every resolved task file, after Verify and before Commit, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --tool codex --task-file "<resolved-task-file>"`. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task.
+For every resolved task file, after Verify and before marking the task `DONE`, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --tool codex --task-file "<resolved-task-file>"`. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task.
 
 Use the current user request as the concrete target for this skill.

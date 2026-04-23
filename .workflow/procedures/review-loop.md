@@ -73,7 +73,7 @@ Run this at the start of an implementation invocation so the task review-round c
 python ".workflow/scripts/review_driver.py" prepare --tool opencode --phase implement --arguments "$ARGUMENTS"
 ```
 
-Then run this after Verify and before Commit for each task file:
+Then run this after Verify and before marking the task `DONE` for each task file:
 
 ```bash
 python ".workflow/scripts/review_driver.py" review-task --tool opencode --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"

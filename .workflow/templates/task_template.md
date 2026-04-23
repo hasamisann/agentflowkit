@@ -43,9 +43,3 @@ Status: `PENDING` | `ACTIVE` | `DONE`
   </done>
 </task>
 ```
-
-## Commit Message
-
-```text
-[replace with predefined conventional commit message]
-```

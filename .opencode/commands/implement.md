@@ -12,6 +12,6 @@ Read `AGENTS.md`, `.workflow/procedures/implement.md`, `.workflow/procedures/rev
 
 Then execute `.workflow/procedures/implement.md` exactly.
 
-For every resolved task file, after Verify and before Commit, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --tool opencode --task-file "<resolved-task-file>"`. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task. If a `codex exec` review conflicts with the task file, always treat the task file as correct.
+For every resolved task file, after Verify and before marking the task `DONE`, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --tool opencode --task-file "<resolved-task-file>"`. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task. If a `codex exec` review conflicts with the task file, always treat the task file as correct.
 
 User arguments: `$ARGUMENTS`

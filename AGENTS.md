@@ -64,7 +64,7 @@ Review invariants:
 - write logs under `logs/reviews/`
 - reuse one canonical review log file per command invocation and overwrite it on each review iteration
 - reviewer-specific raw logs may be written alongside the canonical log as transient diagnostics
-- never finalize a document or commit a task while blocking findings remain
+- never finalize a document, mark a task `DONE`, or create a reviewed implementation commit while blocking findings remain
 - for implementation reviews, include the full task file contents and verify tests, implementation, refactor, verify commands, and done condition against that task
 - one review round launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
 - every reviewer in a round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them
@@ -96,13 +96,11 @@ Per task, follow this order:
 4. Verify: run every command in `<verify>`
 5. Review Loop: run the mandatory Codex review loop and resolve valid blocking findings
 6. Verify Again: rerun relevant verification after review-driven edits
-7. Commit: create exactly one atomic commit using the predefined commit message
+7. Mark the task `DONE` and keep the matching `dependencies.md` row status synchronized
 
 Rules:
 
-- one task = one commit
-- a wave run may execute multiple tasks sequentially, but still one commit per task
-- do not combine multiple task files into one commit
+- a wave run may execute multiple tasks sequentially, but still one task must complete its full lifecycle before the next task starts
 - never stage `.spec/`, `.workflow/`, `.opencode/`, `.claude/`, `.agents/`, `AGENTS.md`, or `CLAUDE.md` unless the user explicitly asks
 - do not push
 - keep the task file status and the matching `dependencies.md` row status synchronized
@@ -118,9 +116,9 @@ Fix task planning must:
 
 ## Commit Conventions
 
-- use Conventional Commits
+- when the user explicitly asks for a commit, use Conventional Commits
 - allowed types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`, `perf`, `style`
-- each task file contains a predefined commit message; use it exactly as written
+- commit granularity is user-directed and does not need to match task boundaries
 
 ## File Reading Discipline
 

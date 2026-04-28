@@ -46,12 +46,12 @@ Create one combined cycle document that captures both requirements and design. A
 17. Replace all placeholders and example values in `CYCLE.md` before presenting it.
 18. Create or update `.spec/cycles/manifest.md` for the new cycle using `.workflow/templates/manifest_template.md` as the structure reference.
 19. Create or update `.spec/cycle_index.md` so it points to the active cycle using `.workflow/templates/cycle_index_template.md` as the structure reference.
-20. Run the mandatory Codex review loop on `CYCLE.md`.
-21. If `manifest.md` was created or materially changed, run the mandatory Codex review loop on `manifest.md`.
-22. If `cycle_index.md` was created or materially changed, run the mandatory Codex review loop on `cycle_index.md`.
+20. Run the mandatory `codex exec` review gate on `CYCLE.md`.
+21. If `manifest.md` was created or materially changed, run the mandatory `codex exec` review gate on `manifest.md`.
+22. If `cycle_index.md` was created or materially changed, run the mandatory `codex exec` review gate on `cycle_index.md`.
 23. Present the review-passed `CYCLE.md` draft to the user and stop for confirmation.
 24. Only after explicit user approval, apply the status-only finalization step by setting `Status: FINALIZED` in `CYCLE.md` and the matching manifest row.
-25. Treat that approval-only finalization as driver validation, not as another normal Codex review round.
+25. Treat that approval-only finalization as driver validation, not as another normal `codex exec` review round.
 
 ## Rules
 

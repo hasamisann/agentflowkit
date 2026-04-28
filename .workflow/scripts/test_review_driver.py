@@ -359,7 +359,7 @@ class PromptConstructionTests(ReviewDriverTestCase):
             prompt,
         )
         self.assertIn(
-            "The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+            "The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review-gate loop.",
             prompt,
         )
 
@@ -503,7 +503,7 @@ class RoundTrackingTests(ReviewDriverTestCase):
         review_driver.write_state(
             stale_state,
             {
-                "tool": "opencode",
+                "interface": "opencode",
                 "phase": "implement",
                 "arguments": "wave 1",
                 "rounds": {"task.md": 7},
@@ -513,7 +513,7 @@ class RoundTrackingTests(ReviewDriverTestCase):
             },
         )
 
-        args = argparse.Namespace(tool="opencode", phase="implement", session_id=None, arguments="wave 1")
+        args = argparse.Namespace(interface="opencode", phase="implement", session_id=None, arguments="wave 1")
         with contextlib.redirect_stdout(io.StringIO()):
             result = review_driver.handle_prepare(args)
         payload = review_driver.read_state(stale_state)
@@ -561,7 +561,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, cycle_index, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(tool="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
             result = review_driver.handle_finish(args)
 
         state = review_driver.read_state(state_path)
@@ -578,14 +578,14 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, _, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(tool="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
             first_result = review_driver.handle_finish(args)
 
         write_file(cycle_doc, review_driver.read_text_file(cycle_doc).replace("**Status**: DRAFT", "**Status**: FINALIZED"))
         write_file(manifest, review_driver.read_text_file(manifest).replace("| DRAFT |", "| FINALIZED |"))
 
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel:
-            args = argparse.Namespace(tool="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -597,7 +597,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, _, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(tool="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
             first_result = review_driver.handle_finish(args)
 
         write_file(
@@ -611,7 +611,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
         stderr = io.StringIO()
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel, contextlib.redirect_stderr(stderr):
-            args = argparse.Namespace(tool="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -624,7 +624,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         investigation, state_path = self.prepare_investigate_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(tool="opencode", phase="investigate", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="investigate", session_id=None, hook_event=None)
             first_result = review_driver.handle_finish(args)
 
         write_file(
@@ -633,7 +633,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         )
 
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel:
-            args = argparse.Namespace(tool="opencode", phase="investigate", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="investigate", session_id=None, hook_event=None)
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -672,7 +672,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
         stderr = io.StringIO()
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel, contextlib.redirect_stderr(stderr):
-            args = argparse.Namespace(tool="opencode", phase="plan-tasks", session_id=None, hook_event=None)
+            args = argparse.Namespace(interface="opencode", phase="plan-tasks", session_id=None, hook_event=None)
             result = review_driver.handle_finish(args)
 
         self.assertEqual(result, 1)
@@ -703,7 +703,7 @@ class ReviewTaskTests(ReviewDriverTestCase):
         }
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, merged_result, "")):
-            args = argparse.Namespace(tool="claude", task_file=task_path.as_posix(), session_id="session-1")
+            args = argparse.Namespace(interface="claude", task_file=task_path.as_posix(), session_id="session-1")
             with contextlib.redirect_stdout(io.StringIO()):
                 result = review_driver.handle_review_task(args)
 

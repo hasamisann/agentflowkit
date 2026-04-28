@@ -1,4 +1,4 @@
-# Codex Review Loop
+# `codex exec` Review Gate
 
 Use this procedure whenever a workflow step creates one document or completes one implementation task.
 
@@ -11,7 +11,7 @@ Do not treat an artifact as complete until the merged `codex exec` review report
 1. Create or implement the artifact.
 2. At the start of artifact creation for that phase, initialize the review state for that phase.
 3. If the user provides manual review feedback, asks for re-review after a prior completion, or explicitly asks to reset review rounds, re-initialize the review state before the next workflow review.
-4. Run one read-only Codex review round for that artifact.
+4. Run one read-only `codex exec` review round for that artifact.
 5. Validate the findings before applying them:
    - `CRITICAL`: must be fixed before completion.
    - `MAJOR`: violates workflow/spec/task requirements or is inappropriate for release quality.
@@ -27,10 +27,11 @@ One review round means the driver launches the configured parallel reviewers wit
 The provided documents are the source of truth for the round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
 During content review, the phase-defined in-progress status is the correct status for the artifact or task being reviewed. Reviewers must not emit blocking findings that only demand a later allowed status transition before the workflow reaches that transition point.
 
-## Required Codex Settings
+## Required Review-Gate Settings
 
-- all review settings come from `.workflow/config/codex-review.toml`
-- change review settings only in `.workflow/config/codex-review.toml`; that file is the single source of truth for model, sandbox, reasoning effort, output schema, prompt transport, document review mode, parallelism, blocking severities, and maximum review turns
+- all review-gate settings come from `.workflow/config/codex-review.toml`
+- change review-gate settings only in `.workflow/config/codex-review.toml`; that file is the single source of truth for the `codex exec` reviewer model, sandbox, reasoning effort, output schema, prompt transport, document review mode, parallelism, blocking severities, and maximum review turns
+- `.workflow/config/codex-review.toml` does not configure human-facing interactive Codex CLI sessions
 - write one canonical review log per command invocation under `logs/reviews/`
 - overwrite that same canonical review log on each review round during the command invocation
 - reviewer-specific raw logs may be written alongside the canonical log as transient diagnostics
@@ -47,7 +48,7 @@ The driver streams reviewer-specific prompts over stdin, inlines document conten
 Run this at the start of artifact creation for the command invocation so the review log path, target scope, and review-round counters are reset:
 
 ```bash
-python ".workflow/scripts/review_driver.py" prepare --tool opencode --phase plan-tasks --arguments "$ARGUMENTS"
+python ".workflow/scripts/review_driver.py" prepare --interface opencode --phase plan-tasks --arguments "$ARGUMENTS"
 ```
 
 For Claude skills, pass `${CLAUDE_SESSION_ID}` so each skill invocation gets its own state file.
@@ -65,7 +66,7 @@ Rerun `prepare` only when the user provides manual review feedback, explicitly a
 Run this at the end of `specify-design`, `plan-tasks`, `investigate`, or `fix-tasks`:
 
 ```bash
-python ".workflow/scripts/review_driver.py" finish --tool opencode --phase plan-tasks
+python ".workflow/scripts/review_driver.py" finish --interface opencode --phase plan-tasks
 ```
 
 If the script exits non-zero, apply the findings and run it again.
@@ -89,23 +90,23 @@ If a later pass in the same invocation unexpectedly returns to `round 1/<max_rev
 Run this at the start of an implementation invocation so the task review-round counters are reset:
 
 ```bash
-python ".workflow/scripts/review_driver.py" prepare --tool opencode --phase implement --arguments "$ARGUMENTS"
+python ".workflow/scripts/review_driver.py" prepare --interface opencode --phase implement --arguments "$ARGUMENTS"
 ```
 
 Then run this after Verify and before marking the task `DONE` for each task file:
 
 ```bash
-python ".workflow/scripts/review_driver.py" review-task --tool opencode --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"
+python ".workflow/scripts/review_driver.py" review-task --interface opencode --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"
 ```
 
-This implementation review injects the full task file contents into the `codex exec` prompt, treats that task file as the source of truth for task-specific requirements, and always treats the task file as authoritative if a normal review instinct would conflict with it. The driver streams the prompt over stdin and requires Codex to verify the current code changes, tests, refactor, verification commands, and done condition against that task. Re-run `prepare --phase implement` before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
+This implementation review injects the full task file contents into the `codex exec` prompt, treats that task file as the source of truth for task-specific requirements, and always treats the task file as authoritative if a normal review instinct would conflict with it. The driver streams the prompt over stdin and requires the `codex exec` reviewer to verify the current code changes, tests, refactor, verification commands, and done condition against that task. Re-run `prepare --phase implement` before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
 
 ## Scope Rules
 
 - Review exactly one target artifact at a time.
 - One target review round may use multiple parallel reviewers, but it still produces one merged canonical result.
 - For document phases, reuse the same review log path for the full command invocation and track review rounds per artifact file.
-- For document phases, do not rely on Codex to read the artifact from disk; the driver must inline the artifact contents into the prompt.
+- For document phases, do not rely on the `codex exec` reviewer to read the artifact from disk; the driver must inline the artifact contents into the prompt.
 - For `plan-tasks` document reviews, inline the active cycle `CYCLE.md` and treat it as a required reference before review starts.
 - For implementation tasks, run one review per task before its commit and track review rounds per task file.
 - For implementation reviews, inline the full task file and treat it as the source of truth for task-specific requirements.

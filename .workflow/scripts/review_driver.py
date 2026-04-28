@@ -77,14 +77,14 @@ def slugify(value: str) -> str:
     return cleaned.strip("-") or "default"
 
 
-def state_path(root: Path, tool: str, phase: str, session_id: str | None) -> Path:
+def state_path(root: Path, interface: str, phase: str, session_id: str | None) -> Path:
     suffix = f"-{slugify(session_id)}" if session_id else ""
-    return ensure_logs_dir(root) / f"{tool}-{phase}{suffix}.state.json"
+    return ensure_logs_dir(root) / f"{interface}-{phase}{suffix}.state.json"
 
 
-def log_path(root: Path, tool: str, phase: str, session_id: str | None) -> Path:
+def log_path(root: Path, interface: str, phase: str, session_id: str | None) -> Path:
     suffix = f"-{slugify(session_id)}" if session_id else ""
-    return ensure_logs_dir(root) / f"{tool}-{phase}{suffix}.json"
+    return ensure_logs_dir(root) / f"{interface}-{phase}{suffix}.json"
 
 
 def reviewer_output_path(output_path: Path, reviewer_index: int) -> Path:
@@ -455,7 +455,7 @@ def finalization_change_error(artifact_path: Path, current_contents: str, approv
     if expected_contents is None:
         return (
             f"Approved snapshot for {artifact_key} does not contain a clean DRAFT status to finalize. "
-            "Run prepare and rerun the document review loop."
+            "Run prepare and rerun the document review-gate loop."
         )
     if current_contents == expected_contents:
         return None
@@ -466,7 +466,7 @@ def finalization_change_error(artifact_path: Path, current_contents: str, approv
         )
     return (
         f"{artifact_key} changed beyond the allowed status-only finalization. Treat this as manual feedback, "
-        "run prepare, and rerun the document review loop."
+        "run prepare, and rerun the document review-gate loop."
     )
 
 
@@ -478,13 +478,13 @@ def validate_specify_design_finalization(root: Path, artifacts: list[Path], payl
     cycle_index = artifact_map.get("cycle_index.md")
 
     if not cycle_doc:
-        issues.append("Missing CYCLE.md during approval-only finalization. Run prepare and rerun the document review loop.")
+        issues.append("Missing CYCLE.md during approval-only finalization. Run prepare and rerun the document review-gate loop.")
         return issues
     if not manifest:
-        issues.append("Missing manifest.md during approval-only finalization. Run prepare and rerun the document review loop.")
+        issues.append("Missing manifest.md during approval-only finalization. Run prepare and rerun the document review-gate loop.")
         return issues
     if not cycle_index:
-        issues.append("Missing cycle_index.md during approval-only finalization. Run prepare and rerun the document review loop.")
+        issues.append("Missing cycle_index.md during approval-only finalization. Run prepare and rerun the document review-gate loop.")
         return issues
 
     approved_snapshots = approved_snapshots_map(payload)
@@ -493,11 +493,11 @@ def validate_specify_design_finalization(root: Path, artifacts: list[Path], payl
     cycle_index_snapshot = approved_snapshots.get(cycle_index.as_posix())
 
     if not isinstance(cycle_snapshot, str):
-        issues.append(f"Missing approved snapshot for {cycle_doc.as_posix()}. Run prepare and rerun the document review loop.")
+        issues.append(f"Missing approved snapshot for {cycle_doc.as_posix()}. Run prepare and rerun the document review-gate loop.")
     if not isinstance(manifest_snapshot, str):
-        issues.append(f"Missing approved snapshot for {manifest.as_posix()}. Run prepare and rerun the document review loop.")
+        issues.append(f"Missing approved snapshot for {manifest.as_posix()}. Run prepare and rerun the document review-gate loop.")
     if not isinstance(cycle_index_snapshot, str):
-        issues.append(f"Missing approved snapshot for {cycle_index.as_posix()}. Run prepare and rerun the document review loop.")
+        issues.append(f"Missing approved snapshot for {cycle_index.as_posix()}. Run prepare and rerun the document review-gate loop.")
     if issues:
         return issues
 
@@ -528,7 +528,7 @@ def validate_specify_design_finalization(root: Path, artifacts: list[Path], payl
     if current_cycle_index != cycle_index_snapshot_text:
         issues.append(
             f"{cycle_index.as_posix()} changed after approval. Approval-only finalization must keep cycle_index.md unchanged. "
-            "Treat this as manual feedback, run prepare, and rerun the document review loop."
+            "Treat this as manual feedback, run prepare, and rerun the document review-gate loop."
         )
 
     return issues
@@ -540,7 +540,7 @@ def validate_investigate_finalization(artifacts: list[Path], payload: dict[str, 
     investigation = artifact_map.get("INVESTIGATION.md")
     if not investigation:
         issues.append(
-            "Missing INVESTIGATION.md during approval-only finalization. Run prepare and rerun the document review loop."
+            "Missing INVESTIGATION.md during approval-only finalization. Run prepare and rerun the document review-gate loop."
         )
         return issues
 
@@ -548,7 +548,7 @@ def validate_investigate_finalization(artifacts: list[Path], payload: dict[str, 
     investigation_snapshot = approved_snapshots.get(investigation.as_posix())
     if not isinstance(investigation_snapshot, str):
         issues.append(
-            f"Missing approved snapshot for {investigation.as_posix()}. Run prepare and rerun the document review loop."
+            f"Missing approved snapshot for {investigation.as_posix()}. Run prepare and rerun the document review-gate loop."
         )
         return issues
 
@@ -635,14 +635,14 @@ def status_transition_review_lines(phase: str) -> list[str]:
             [
                 "- During specify-design content review, `CYCLE.md` and the matching `manifest.md` row are expected to remain `DRAFT` until explicit user approval.",
                 "- During specify-design content review, `cycle_index.md` may point to the in-progress cycle as `ACTIVE` while the cycle document remains `DRAFT`.",
-                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review-gate loop.",
             ]
         )
     elif phase == "investigate":
         lines.extend(
             [
                 "- During investigate content review, `INVESTIGATION.md` is expected to remain `DRAFT` until explicit user approval.",
-                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review loop.",
+                "- The post-approval `DRAFT` to `FINALIZED` change is validated separately and is not part of the normal content review-gate loop.",
             ]
         )
     elif phase in {"plan-tasks", "fix-tasks"}:
@@ -1388,7 +1388,7 @@ def advisory_summary(result: dict[str, Any]) -> str:
 
 
 def build_failure_message(artifact_path: str, result: dict[str, Any]) -> str:
-    sections = [f"Codex review found blocking issues in {artifact_path}."]
+    sections = [f"`codex exec` review found blocking issues in {artifact_path}."]
     blocking = blocking_summary(result)
     if blocking:
         sections.append(blocking)
@@ -1431,39 +1431,39 @@ def coerce_non_negative_int(value: Any) -> int:
 
 def fresh_state_payload(
     root: Path,
-    tool: str,
+    interface: str,
     phase: str,
     session_id: str | None,
     arguments: str,
     review_config_path: Path,
 ) -> dict[str, Any]:
     return {
-        "tool": tool,
+        "interface": interface,
         "phase": phase,
         "session_id": session_id,
         "arguments": arguments,
-        "state_path": str(state_path(root, tool, phase, session_id)),
-        "review_log_path": str(log_path(root, tool, phase, session_id)),
+        "state_path": str(state_path(root, interface, phase, session_id)),
+        "review_log_path": str(log_path(root, interface, phase, session_id)),
         "review_config_path": str(review_config_path),
         "targets": [path.as_posix() for path in resolve_task_targets(root, arguments)] if phase == "implement" else [],
         "rounds": {},
         "approved_hashes": {},
         "approved_snapshots": {},
         "awaiting_user_approval": False,
-        "state_version": 3,
+        "state_version": 4,
     }
 
 
 def hydrate_state_payload(
     root: Path,
-    tool: str,
+    interface: str,
     phase: str,
     session_id: str | None,
     arguments: str,
     review_config_path: Path,
     payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    state = fresh_state_payload(root, tool, phase, session_id, arguments, review_config_path)
+    state = fresh_state_payload(root, interface, phase, session_id, arguments, review_config_path)
     if not payload:
         return state
 
@@ -1562,9 +1562,9 @@ def handle_prepare(args: argparse.Namespace) -> int:
         eprint(str(exc))
         return 1
 
-    payload = fresh_state_payload(root, args.tool, args.phase, args.session_id, args.arguments, config["config_path"])
-    write_state(state_path(root, args.tool, args.phase, args.session_id), payload)
-    print(f"Prepared review state for {args.tool}:{args.phase}.")
+    payload = fresh_state_payload(root, args.interface, args.phase, args.session_id, args.arguments, config["config_path"])
+    write_state(state_path(root, args.interface, args.phase, args.session_id), payload)
+    print(f"Prepared review state for {args.interface}:{args.phase}.")
     return 0
 
 
@@ -1584,7 +1584,7 @@ def handle_finish(args: argparse.Namespace) -> int:
     hook_input = read_stdin_json() if args.hook_event else {}
     session_id = args.session_id or str(hook_input.get("session_id", "") or "") or None
     root = find_repo_root(Path(hook_input.get("cwd", os.getcwd())))
-    current_state_path = state_path(root, args.tool, args.phase, session_id)
+    current_state_path = state_path(root, args.interface, args.phase, session_id)
     raw_payload = read_state(current_state_path)
     if not raw_payload:
         return 0
@@ -1597,7 +1597,7 @@ def handle_finish(args: argparse.Namespace) -> int:
 
     payload = hydrate_state_payload(
         root,
-        args.tool,
+        args.interface,
         args.phase,
         session_id,
         str(raw_payload.get("arguments", "")),
@@ -1617,7 +1617,7 @@ def handle_finish(args: argparse.Namespace) -> int:
         current_state_path.unlink(missing_ok=True)
         return 0
 
-    review_log = log_path(root, args.tool, args.phase, session_id)
+    review_log = log_path(root, args.interface, args.phase, session_id)
     approved_hashes = approved_hashes_map(payload)
     approved_snapshots = approved_snapshots_map(payload)
     for artifact in artifacts:
@@ -1649,7 +1649,7 @@ def handle_finish(args: argparse.Namespace) -> int:
             review_round=next_round,
         )
         if not ok or not result:
-            message = f"Codex review failed for {artifact_key}: {error_message}"
+            message = f"`codex exec` review failed for {artifact_key}: {error_message}"
             return return_finish_result(message, args.hook_event)
 
         mark_round_used(payload, artifact_key, next_round)
@@ -1687,10 +1687,10 @@ def handle_review_task(args: argparse.Namespace) -> int:
         eprint(f"Task file not found: {task_path}")
         return 1
 
-    current_state_path = state_path(root, args.tool, "implement", args.session_id)
+    current_state_path = state_path(root, args.interface, "implement", args.session_id)
     payload = hydrate_state_payload(
         root,
-        args.tool,
+        args.interface,
         "implement",
         args.session_id,
         "",
@@ -1706,7 +1706,7 @@ def handle_review_task(args: argparse.Namespace) -> int:
         eprint(limit_message)
         return 1
 
-    review_log = log_path(root, args.tool, "implement", args.session_id)
+    review_log = log_path(root, args.interface, "implement", args.session_id)
     reviewer_requests = build_implementation_reviewer_requests(root, task_path, config, next_round)
     ok, result, error_message = run_codex_parallel(
         root,
@@ -1720,7 +1720,7 @@ def handle_review_task(args: argparse.Namespace) -> int:
         review_round=next_round,
     )
     if not ok or not result:
-        eprint(f"Codex implementation review failed for {task_key}: {error_message}")
+        eprint(f"`codex exec` implementation review failed for {task_key}: {error_message}")
         return 1
 
     mark_round_used(payload, task_key, next_round)
@@ -1730,30 +1730,30 @@ def handle_review_task(args: argparse.Namespace) -> int:
         eprint(build_failure_message(task_key, result))
         return 1
 
-    print(build_success_message("Codex implementation review", task_key, result))
+    print(build_success_message("`codex exec` implementation review", task_key, result))
     return 0
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Prepare and run workflow Codex reviews.")
+    parser = argparse.ArgumentParser(description="Prepare and run workflow `codex exec` reviews.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     prepare = subparsers.add_parser("prepare")
-    prepare.add_argument("--tool", required=True)
+    prepare.add_argument("--interface", required=True)
     prepare.add_argument("--phase", required=True, choices=sorted(PHASES))
     prepare.add_argument("--session-id")
     prepare.add_argument("--arguments", default="")
     prepare.set_defaults(handler=handle_prepare)
 
     finish = subparsers.add_parser("finish")
-    finish.add_argument("--tool", required=True)
+    finish.add_argument("--interface", required=True)
     finish.add_argument("--phase", required=True, choices=FINISH_PHASES)
     finish.add_argument("--session-id")
     finish.add_argument("--hook-event")
     finish.set_defaults(handler=handle_finish)
 
     review_task = subparsers.add_parser("review-task")
-    review_task.add_argument("--tool", required=True)
+    review_task.add_argument("--interface", required=True)
     review_task.add_argument("--task-file", required=True)
     review_task.add_argument("--session-id")
     review_task.set_defaults(handler=handle_review_task)

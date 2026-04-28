@@ -16,7 +16,13 @@ Invocation differs by agent interface:
 - Claude Code skills: `/specify-design`, `/plan-tasks`, `/implement`, `/investigate`, `/fix-tasks`
 - Codex skills: `$specify-design`, `$plan-tasks`, `$implement`, `$investigate`, `$fix-tasks`
 
-Codex support is implemented as repository skills under `.agents/skills`; these are invoked with `$<skill-name>` or selected from Codex's skill picker, not as custom slash commands.
+Codex CLI support is implemented as repository skills under `.agents/skills`; these are invoked with `$<skill-name>` or selected from Codex's skill picker, not as custom slash commands.
+
+Terminology:
+
+- `Codex CLI support` means the human-facing Codex agent interface and the repository skills in `.agents/skills`.
+- ``codex exec` review gate` means the mandatory read-only reviewer launched by `.workflow/scripts/review_driver.py`.
+- `.workflow/config/codex-review.toml` configures only the review gate; it is not interactive Codex CLI configuration.
 
 `specify-design` starts with `grill-me` inside the phase. `grill-me` is not a separate workflow phase.
 
@@ -51,7 +57,7 @@ Statuses:
 - `PLAN-TASKS -> IMPLEMENT`: task files and `dependencies.md` exist; if CI is enabled in `CYCLE.md`, `.github/workflows/ci.yml` exists; `.workflow/project_context.md` contains no placeholder or example values
 - `INVESTIGATE -> FIX-TASKS`: `INVESTIGATION.md` exists and is `FINALIZED`
 
-## Mandatory Codex Review Loop
+## Mandatory `codex exec` Review Gate
 
 Every workflow artifact and every implementation task must complete this loop before it is treated as complete:
 
@@ -69,7 +75,7 @@ Applies to `CYCLE.md`, `manifest.md`, `cycle_index.md`, `INVESTIGATION.md`, `.wo
 
 Review invariants:
 
-- use the review settings defined in `.workflow/config/codex-review.toml`
+- use the review settings defined in `.workflow/config/codex-review.toml`; these settings apply only to review-gate `codex exec` runs
 - keep the review read-only
 - write logs under `logs/reviews/`
 - reuse one canonical review log file per command invocation and overwrite it on each review iteration
@@ -105,7 +111,7 @@ Per task, follow this order:
 2. Green: implement the minimum change to pass
 3. Refactor: clean up while keeping tests green
 4. Verify: run every command in `<verify>`
-5. Review Loop: run the mandatory Codex review loop and resolve valid blocking findings
+5. Review Gate: run the mandatory `codex exec` review gate and resolve valid blocking findings
 6. Verify Again: rerun relevant verification after review-driven edits
 7. Mark the task `DONE` and keep the matching `dependencies.md` row status synchronized
 

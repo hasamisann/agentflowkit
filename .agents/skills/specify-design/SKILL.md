@@ -9,7 +9,7 @@ Read `AGENTS.md`, `.workflow/procedures/specify-design.md`, `.workflow/procedure
 
 Do not run `prepare` at skill start. Start with the `grill-me` phase in `.workflow/procedures/specify-design.md`.
 
-Only when the user explicitly asks to start drafting `CYCLE.md`, and immediately before the first draft-side effect, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --tool codex --phase specify-design --arguments "<restate the current user request faithfully>"`.
+Only when the user explicitly asks to start drafting `CYCLE.md`, and immediately before the first draft-side effect, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface codex-cli --phase specify-design --arguments "<restate the current user request faithfully>"`.
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and rerun `finish`.
 
@@ -21,4 +21,4 @@ If review output unexpectedly returns to `round 1/<N>` after a prior round in th
 
 Then execute `.workflow/procedures/specify-design.md` exactly.
 
-Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --tool codex --phase specify-design`. During grill-me-only turns this safely no-ops because no review state exists yet. Use the same `finish` command for repeated self-fix review rounds within the same drafting invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the draft.
+Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --interface codex-cli --phase specify-design`. During grill-me-only turns this safely no-ops because no review state exists yet. Use the same `finish` command for repeated self-fix review rounds within the same drafting invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the draft.

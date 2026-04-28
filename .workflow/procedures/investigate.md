@@ -31,10 +31,10 @@ Investigate one bug and produce one finalized investigation document.
    - target branch
    - planned fix branch
 12. Replace all placeholders and example values in `INVESTIGATION.md` before presenting it.
-13. Run the mandatory Codex review loop on `INVESTIGATION.md`.
+13. Run the mandatory `codex exec` review gate on `INVESTIGATION.md`.
 14. Present the review-passed investigation draft and stop for user confirmation.
 15. Only after explicit approval, apply the status-only finalization step by setting `Status: FINALIZED`.
-16. Treat that approval-only finalization as driver validation, not as another normal Codex review round.
+16. Treat that approval-only finalization as driver validation, not as another normal `codex exec` review round.
 
 ## Rules
 

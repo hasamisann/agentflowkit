@@ -4,7 +4,7 @@ argument-hint: "[cycle path or active cycle]"
 ---
 
 Review state setup:
-!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --tool opencode --phase plan-tasks --arguments "$ARGUMENTS"`
+!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface opencode --phase plan-tasks --arguments "$ARGUMENTS"`
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and rerun `finish`.
 
@@ -16,6 +16,6 @@ Read `AGENTS.md`, `.workflow/procedures/plan-tasks.md`, `.workflow/procedures/re
 
 Then execute `.workflow/procedures/plan-tasks.md` exactly.
 
-Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --tool opencode --phase plan-tasks`. Use the same `finish` command for repeated self-fix review rounds within the same invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task plan. Treat the active `CYCLE.md` and each generated task file as authoritative if a `codex exec` review conflicts with them.
+Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --interface opencode --phase plan-tasks`. Use the same `finish` command for repeated self-fix review rounds within the same invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the task plan. Treat the active `CYCLE.md` and each generated task file as authoritative if a `codex exec` review conflicts with them.
 
 User arguments: `$ARGUMENTS`

@@ -29,13 +29,13 @@ Implement one task or every task in one requested wave.
 6. Execute Green: implement the smallest passing change.
 7. Execute Refactor: clean up while keeping tests green.
 8. Execute Verify: run every command in `<verify>`.
-9. Run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --tool <agent> --task-file <task-file>` and include `--session-id <session-id>` when the host provides one.
-10. Include the full task file contents in the implementation review prompt, treat that task file as the source of truth for task-specific requirements, treat the task file as authoritative if any review suggestion conflicts with it, and require Codex to verify compliance with the task's `<test>`, `<action>`, `<refactor>`, `<verify>`, and `<done>` sections.
+9. Run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --interface <agent-interface> --task-file <task-file>` and include `--session-id <session-id>` when the host provides one.
+10. Include the full task file contents in the implementation review prompt, treat that task file as the source of truth for task-specific requirements, treat the task file as authoritative if any review suggestion conflicts with it, and require the `codex exec` reviewer to verify compliance with the task's `<test>`, `<action>`, `<refactor>`, `<verify>`, and `<done>` sections.
 11. Validate review findings before applying them:
     - fix valid `CRITICAL` and `MAJOR` findings
     - optionally apply valid `MIDDLE` and `MINOR` findings
     - if a blocking finding appears incorrect or ambiguous, ask the user before changing the implementation
-12. Repeat the review loop until the task has no blocking findings or reaches the configured review turn limit.
+12. Repeat the `codex exec` review-gate loop until the task has no blocking findings or reaches the configured review turn limit.
 13. Re-run the relevant verification after review-driven fixes.
 14. Mark the task `DONE`.
 15. Mark the matching `dependencies.md` row `DONE`.

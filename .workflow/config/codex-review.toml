@@ -1,3 +1,4 @@
+# Review-gate-only `codex exec` settings. This file does not configure interactive Codex CLI sessions.
 model = "gpt-5.4"
 sandbox = "read-only"
 output_schema = ".workflow/review/codex-review-schema.json"

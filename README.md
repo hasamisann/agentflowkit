@@ -2,7 +2,7 @@
 
 Reusable workflow scaffolding for agent-assisted software projects.
 
-This repository installs a local `.workflow`, `.spec`, and agent-interface setup into a target project. It supports OpenCode commands, Claude Code skills, and Codex repository skills while sharing the same workflow artifacts and review loop.
+This repository installs a local `.workflow`, `.spec`, and agent-interface setup into a target project. It supports OpenCode commands, Claude Code skills, and Codex CLI repository skills while sharing the same workflow artifacts and `codex exec` review gate.
 
 ## Install
 
@@ -52,6 +52,8 @@ $investigate
 $fix-tasks
 ```
 
+Codex CLI support is separate from the review gate. The review gate is an internal workflow check that launches `codex exec` through `.workflow/scripts/review_driver.py`.
+
 ## Artifacts
 
 Workflow state is local-only and excluded from git by default:
@@ -63,6 +65,6 @@ Workflow state is local-only and excluded from git by default:
 - `.spec/bugs/<bug-id>/INVESTIGATION.md`
 - `.spec/bugs/<bug-id>/tasks/*.md`
 
-## Review Loop
+## Review Gate
 
-Workflow artifacts and implementation tasks use the mandatory Codex review loop through `.workflow/scripts/review_driver.py`. Review settings live in `.workflow/config/codex-review.toml`.
+Workflow artifacts and implementation tasks use the mandatory `codex exec` review gate through `.workflow/scripts/review_driver.py`. Review settings live in `.workflow/config/codex-review.toml` and do not configure interactive Codex CLI sessions.

@@ -7,7 +7,7 @@ Review state setup:
 Do not run `prepare` at command start. Start with the `grill-me` phase in `.workflow/procedures/specify-design.md`.
 
 Only when the user explicitly asks to start drafting `CYCLE.md`, and immediately before the first draft-side effect, run:
-!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --tool opencode --phase specify-design --arguments "$ARGUMENTS"`
+!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface opencode --phase specify-design --arguments "$ARGUMENTS"`
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and rerun `finish`.
 
@@ -21,6 +21,6 @@ Read `AGENTS.md`, `.workflow/procedures/specify-design.md`, `.workflow/procedure
 
 Then execute `.workflow/procedures/specify-design.md` exactly.
 
-Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --tool opencode --phase specify-design`. During grill-me-only turns this safely no-ops because no review state exists yet. Use the same `finish` command for repeated self-fix review rounds within the same drafting invocation; do not rerun `prepare` unless one of the reset conditions applies. On the draft pass, resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the draft. Treat the provided workflow documents and the draft itself as authoritative if a `codex exec` review conflicts with them. After explicit user approval, run the same `finish` command again without rerunning `prepare`; the driver will accept only the status-only finalization change and will reject any additional content edits until the review state is reset.
+Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --interface opencode --phase specify-design`. During grill-me-only turns this safely no-ops because no review state exists yet. Use the same `finish` command for repeated self-fix review rounds within the same drafting invocation; do not rerun `prepare` unless one of the reset conditions applies. On the draft pass, resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the draft. Treat the provided workflow documents and the draft itself as authoritative if a `codex exec` review conflicts with them. After explicit user approval, run the same `finish` command again without rerunning `prepare`; the driver will accept only the status-only finalization change and will reject any additional content edits until the review state is reset.
 
 User arguments: `$ARGUMENTS`

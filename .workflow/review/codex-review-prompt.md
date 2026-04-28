@@ -1,6 +1,6 @@
-# Codex Review Prompt Template
+# `codex exec` Review Prompt Template
 
-Use this as a prompt shape when calling `codex exec` for workflow reviews.
+Use this as a prompt shape when calling `codex exec` for workflow review-gate runs.
 
 ## Document Review Shape
 

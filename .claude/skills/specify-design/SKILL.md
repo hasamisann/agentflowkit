@@ -7,14 +7,14 @@ hooks:
   Stop:
     - hooks:
         - type: command
-          command: python "$CLAUDE_PROJECT_DIR/.workflow/scripts/review_driver.py" finish --tool claude --phase specify-design --hook-event Stop
+          command: python "$CLAUDE_PROJECT_DIR/.workflow/scripts/review_driver.py" finish --interface claude --phase specify-design --hook-event Stop
 ---
 
 Review state setup:
 Do not run `prepare` at skill start. Start with the `grill-me` phase in `.workflow/procedures/specify-design.md`.
 
 Only when the user explicitly asks to start drafting `CYCLE.md`, and immediately before the first draft-side effect, run:
-!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --tool claude --phase specify-design --session-id "${CLAUDE_SESSION_ID}" --arguments "$ARGUMENTS"`
+!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface claude --phase specify-design --session-id "${CLAUDE_SESSION_ID}" --arguments "$ARGUMENTS"`
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and let the existing Stop hook rerun `finish`.
 

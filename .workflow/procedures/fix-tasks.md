@@ -22,8 +22,8 @@ Break one finalized bug investigation into atomic fix tasks.
 9. Replace all placeholders and example values in every fix task file before presenting them.
 10. Create `dependencies.md` from `.workflow/templates/dependencies_template.md`.
 11. Add exactly one row per task file and assign wave, dependency list, and initial `PENDING` status.
-12. Run the mandatory Codex review loop on each fix task file individually.
-13. Run the mandatory Codex review loop on `dependencies.md`.
+12. Run the mandatory `codex exec` review gate on each fix task file individually.
+13. Run the mandatory `codex exec` review gate on `dependencies.md`.
 14. Present the fix task breakdown and stop for user confirmation.
 
 ## Rules

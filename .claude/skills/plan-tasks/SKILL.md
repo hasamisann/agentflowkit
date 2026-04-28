@@ -7,11 +7,11 @@ hooks:
   Stop:
     - hooks:
         - type: command
-          command: python "$CLAUDE_PROJECT_DIR/.workflow/scripts/review_driver.py" finish --tool claude --phase plan-tasks --hook-event Stop
+          command: python "$CLAUDE_PROJECT_DIR/.workflow/scripts/review_driver.py" finish --interface claude --phase plan-tasks --hook-event Stop
 ---
 
 Review state setup:
-!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --tool claude --phase plan-tasks --session-id "${CLAUDE_SESSION_ID}" --arguments "$ARGUMENTS"`
+!`python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface claude --phase plan-tasks --session-id "${CLAUDE_SESSION_ID}" --arguments "$ARGUMENTS"`
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and let the existing Stop hook rerun `finish`.
 

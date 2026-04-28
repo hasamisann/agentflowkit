@@ -52,20 +52,6 @@ $investigate
 $fix-tasks
 ```
 
-The Codex wrappers simply forward arguments to the installed `codex` CLI:
-
-```powershell
-.\.workflow\scripts\codex.ps1
-```
-
-```cmd
-.workflow\scripts\codex.cmd
-```
-
-```sh
-./.workflow/scripts/codex.sh
-```
-
 ## Artifacts
 
 Workflow state is local-only and excluded from git by default:

@@ -255,10 +255,7 @@ printf 'Next steps:\n'
 printf '  1. Open the project in your editor\n'
 printf '  2. Start OpenCode and run /specify-design\n'
 printf '  3. Start Claude Code and run /specify-design\n'
-printf '  4. For Codex, start one of the wrappers and invoke repo skills with $specify-design\n'
-printf '     - PowerShell: .workflow/scripts/codex.ps1\n'
-printf '     - cmd.exe:    .workflow/scripts/codex.cmd\n'
-printf '     - POSIX:      ./.workflow/scripts/codex.sh\n'
+printf '  4. For Codex, start codex in the project and invoke repo skills with $specify-design\n'
 if [ "$INIT_GIT" -eq 0 ]; then
   printf '  5. Re-run with --init-git if you want this script to initialize git\n'
 fi

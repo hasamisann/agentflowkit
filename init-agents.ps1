@@ -324,7 +324,7 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Open the project in your editor"
 Write-Host "  2. Start OpenCode and run /specify-design"
 Write-Host "  3. Start Claude Code and run /specify-design"
-Write-Host "  4. For Codex, start one of the wrappers and invoke the shared skills with /skills or $"
+Write-Host '  4. For Codex, start one of the wrappers and invoke repo skills with $specify-design'
 Write-Host "     - PowerShell: .workflow/scripts/codex.ps1"
 Write-Host "     - cmd.exe:    .workflow/scripts/codex.cmd"
 Write-Host "     - POSIX:      ./.workflow/scripts/codex.sh"

@@ -1,2 +1,7 @@
+interface:
+  display_name: "Plan Tasks"
+  short_description: "Split a finalized cycle into implementation tasks."
+  default_prompt: "$plan-tasks "
+
 policy:
   allow_implicit_invocation: false

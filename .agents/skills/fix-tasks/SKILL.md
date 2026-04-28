@@ -1,7 +1,9 @@
 ---
 name: fix-tasks
-description: Break one finalized investigation into atomic fix tasks. Use when the user wants a bug-fix task breakdown.
+description: Explicit Codex workflow skill invoked as $fix-tasks. Break one finalized investigation into atomic bug-fix tasks.
 ---
+
+This repository skill is designed for explicit Codex invocation as `$fix-tasks`.
 
 Read `AGENTS.md`, `.workflow/procedures/fix-tasks.md`, `.workflow/procedures/review-loop.md`, `.workflow/templates/task_template.md`, `.workflow/templates/dependencies_template.md`, and the resolved `INVESTIGATION.md`.
 

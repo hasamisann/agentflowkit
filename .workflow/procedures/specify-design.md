@@ -56,9 +56,9 @@ Create one combined cycle document that captures both requirements and design. A
 ## Rules
 
 - Create one cycle document only; do not split requirements and design across separate files.
-- `/specify-design` always starts with `grill-me`; do not skip directly to drafting unless the user's current message explicitly asks to start `CYCLE.md` drafting.
+- The `specify-design` phase always starts with `grill-me`; do not skip directly to drafting unless the user's current message explicitly asks to start `CYCLE.md` drafting.
 - `manifest.md` is the full cycle catalog. `cycle_index.md` is the current-cycle pointer used when the user omits a cycle path.
 - Do not auto-finalize.
-- Do not proceed to `/plan-tasks` while `CYCLE.md` is still draft.
+- Do not proceed to the `plan-tasks` phase while `CYCLE.md` is still draft.
 - Do not leave placeholders, example values, or unresolved open questions presented as final decisions.
 - Use `Resolved Decisions` as the index of non-trivial decisions, but keep the detailed requirements and design reflected in the relevant existing sections.

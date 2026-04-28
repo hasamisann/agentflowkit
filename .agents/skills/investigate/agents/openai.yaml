@@ -1,2 +1,7 @@
+interface:
+  display_name: "Investigate"
+  short_description: "Investigate one bug and prepare an approval report."
+  default_prompt: "$investigate "
+
 policy:
   allow_implicit_invocation: false

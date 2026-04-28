@@ -1,2 +1,7 @@
+interface:
+  display_name: "Implement"
+  short_description: "Execute one workflow task or wave."
+  default_prompt: "$implement "
+
 policy:
   allow_implicit_invocation: false

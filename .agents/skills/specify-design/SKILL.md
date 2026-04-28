@@ -1,7 +1,9 @@
 ---
 name: specify-design
-description: Grill the plan, then create one combined cycle document and stop for user approval. Use when the user wants to start a new cycle or define a new feature.
+description: Explicit Codex workflow skill invoked as $specify-design. Grill the plan, then create one combined cycle document and stop for user approval when starting a new cycle or defining a new feature.
 ---
+
+This repository skill is designed for explicit Codex invocation as `$specify-design`.
 
 Read `AGENTS.md`, `.workflow/procedures/specify-design.md`, `.workflow/procedures/review-loop.md`, `.workflow/templates/cycle_template.md`, `.workflow/templates/manifest_template.md`, and `.workflow/templates/cycle_index_template.md`.
 

@@ -1,2 +1,7 @@
+interface:
+  display_name: "Specify Design"
+  short_description: "Grill requirements and draft a workflow cycle."
+  default_prompt: "$specify-design "
+
 policy:
   allow_implicit_invocation: false

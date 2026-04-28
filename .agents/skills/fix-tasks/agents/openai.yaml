@@ -1,2 +1,7 @@
+interface:
+  display_name: "Fix Tasks"
+  short_description: "Split a finalized investigation into fix tasks."
+  default_prompt: "$fix-tasks "
+
 policy:
   allow_implicit_invocation: false

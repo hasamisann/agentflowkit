@@ -1,7 +1,9 @@
 ---
 name: implement
-description: Implement one task or one requested wave. Use when the user wants to execute a workflow task file or wave.
+description: Explicit Codex workflow skill invoked as $implement. Implement one task or one requested wave from workflow task files.
 ---
+
+This repository skill is designed for explicit Codex invocation as `$implement`.
 
 Read `AGENTS.md`, `.workflow/procedures/implement.md`, `.workflow/procedures/review-loop.md`, the resolved task file, and the relevant `dependencies.md` file when the request targets a wave.
 

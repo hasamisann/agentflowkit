@@ -1,7 +1,9 @@
 ---
 name: plan-tasks
-description: Break one finalized cycle document into atomic implementation tasks. Use when the user wants a task breakdown for the active or specified cycle.
+description: Explicit Codex workflow skill invoked as $plan-tasks. Break one finalized cycle document into atomic implementation tasks for the active or specified cycle.
 ---
+
+This repository skill is designed for explicit Codex invocation as `$plan-tasks`.
 
 Read `AGENTS.md`, `.workflow/procedures/plan-tasks.md`, `.workflow/procedures/review-loop.md`, `.workflow/project_context.md`, `.workflow/templates/task_template.md`, `.workflow/templates/dependencies_template.md`, `.workflow/templates/github-actions/ci.yml`, and the resolved `CYCLE.md`.
 

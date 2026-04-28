@@ -1,7 +1,9 @@
 ---
 name: investigate
-description: Investigate one bug and stop for user approval. Use when the user wants a structured bug investigation.
+description: Explicit Codex workflow skill invoked as $investigate. Investigate one bug, capture root cause and reproduction, and stop for user approval.
 ---
+
+This repository skill is designed for explicit Codex invocation as `$investigate`.
 
 Read `AGENTS.md`, `.workflow/procedures/investigate.md`, `.workflow/procedures/review-loop.md`, `.workflow/project_context.md`, and `.workflow/templates/investigation_template.md`.
 

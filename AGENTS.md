@@ -4,13 +4,21 @@ Read `.workflow/project_context.md` for repository-specific build, test, archite
 
 ## Workflow Phases
 
-- `/specify-design`
-- `/plan-tasks`
-- `/implement`
-- `/investigate`
-- `/fix-tasks`
+- `specify-design`
+- `plan-tasks`
+- `implement`
+- `investigate`
+- `fix-tasks`
 
-`/specify-design` starts with `grill-me` inside the phase. `grill-me` is not a separate workflow phase.
+Invocation differs by agent interface:
+
+- OpenCode commands: `/specify-design`, `/plan-tasks`, `/implement`, `/investigate`, `/fix-tasks`
+- Claude Code skills: `/specify-design`, `/plan-tasks`, `/implement`, `/investigate`, `/fix-tasks`
+- Codex skills: `$specify-design`, `$plan-tasks`, `$implement`, `$investigate`, `$fix-tasks`
+
+Codex support is implemented as repository skills under `.agents/skills`; these are invoked with `$<skill-name>` or selected from Codex's skill picker, not as custom slash commands.
+
+`specify-design` starts with `grill-me` inside the phase. `grill-me` is not a separate workflow phase.
 
 Main flow: `INIT -> SPECIFY-DESIGN -> PLAN-TASKS -> IMPLEMENT`
 
@@ -154,8 +162,8 @@ Shared local workflow files live under `.workflow/`, `.opencode/`, `.claude/`, `
 ## Branch Strategy
 
 - use the repository default branch as the integration branch
-- `feat/<name>`: cycle branch created during `/specify-design`
-- `fix/<name>`: bug-fix branch created during `/investigate`
+- `feat/<name>`: cycle branch created during `specify-design`
+- `fix/<name>`: bug-fix branch created during `investigate`
 
 Cycle completion: finish all task files, merge the feature branch into the default branch, then update `.spec/cycle_index.md` to `DONE` or replace it with the next active cycle.
 

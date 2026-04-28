@@ -30,7 +30,7 @@ Implement one task or every task in one requested wave.
 7. Execute Refactor: clean up while keeping tests green.
 8. Execute Verify: run every command in `<verify>`.
 9. Run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --interface <agent-interface> --task-file <task-file>` and include `--session-id <session-id>` when the host provides one.
-10. Include the full task file contents in the implementation review prompt, treat that task file as the source of truth for task-specific requirements, treat the task file as authoritative if any review suggestion conflicts with it, and require the `codex exec` reviewer to verify compliance with the task's `<test>`, `<action>`, `<refactor>`, `<verify>`, and `<done>` sections.
+10. Include the full task file contents in the implementation review prompt, treat the current user request as authoritative over the task file, treat that task file as authoritative over review suggestions, and require the `codex exec` reviewer to verify compliance with the task's `<test>`, `<action>`, `<refactor>`, `<verify>`, and `<done>` sections.
 11. Validate review findings before applying them:
     - fix valid `CRITICAL` and `MAJOR` findings
     - optionally apply valid `MIDDLE` and `MINOR` findings
@@ -50,5 +50,5 @@ Implement one task or every task in one requested wave.
 - If the user explicitly asks for a commit, create it only after the task has no blocking review findings.
 - If a bounded review stage's turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
 - If one task in a wave fails, stop and report before attempting later tasks in the same wave.
-- Review findings must not contradict the task file or the provided workflow documents; if those documents conflict, report the conflict explicitly.
-- If a `codex exec` review conflicts with the task file, always treat the task file as correct and do not change the implementation only to satisfy the conflicting review.
+- Review findings must not contradict the current user request, the task file, or the provided workflow documents; if those sources conflict, report the conflict explicitly.
+- If a `codex exec` review conflicts with the task file, treat the task file as correct unless the current user request explicitly supersedes it, and do not change the implementation only to satisfy the conflicting review.

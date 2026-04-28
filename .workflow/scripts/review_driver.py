@@ -637,18 +637,30 @@ def severity_guidance_lines(config: dict[str, Any], stage: dict[str, Any], round
     ]
 
 
-def docs_first_review_lines(primary_source: str) -> list[str]:
-    return [
-        "Review order:",
-        f"- First, verify compliance with {primary_source}. Treat the provided documents as the source of truth for this review.",
-        "- Second, perform normal review for concrete issues that do not conflict with those documents.",
+def docs_first_review_lines(primary_source: str, current_user_request: str = "") -> list[str]:
+    lines = [
+        "Authority order:",
+        "- Resolve conflicts in this order: current explicit user request, applicable spec/workflow documents, then review findings.",
+        f"- First, verify compliance with the current user request and {primary_source}.",
+        "- Second, perform normal review for concrete issues that do not conflict with a higher-priority source.",
         "",
-        "Document precedence rules:",
-        "- Do not report findings or suggested fixes that conflict with the provided documents.",
-        "- Do not prefer generic best practices over an explicit documented requirement in the provided documents.",
-        "- If a provided document explicitly requires, permits, or constrains a choice, respect that document instead of challenging the choice.",
-        "- If the provided documents conflict with each other, report that document conflict as the finding instead of inventing a resolution.",
+        "Precedence rules:",
+        "- Do not report findings or suggested fixes that conflict with the current user request or the provided documents.",
+        "- Do not prefer generic best practices over an explicit user instruction or documented requirement.",
+        "- If a provided document explicitly requires, permits, or constrains a choice, respect that document unless the current user request supersedes it.",
+        "- If higher-priority sources conflict with each other, report that conflict as the finding instead of inventing a resolution.",
     ]
+    if current_user_request.strip():
+        lines.extend(
+            [
+                "",
+                "Current user request:",
+                "```text",
+                current_user_request.strip(),
+                "```",
+            ]
+        )
+    return lines
 
 
 def prompt_lens_lines(prompt_lens: str) -> list[str]:
@@ -866,6 +878,7 @@ def document_prompt(
     config: dict[str, Any],
     stage: dict[str, Any],
     round_number: int,
+    current_user_request: str = "",
     prompt_lens: str | None = None,
 ) -> str:
     if config["document_review_mode"] != "inline-artifact":
@@ -911,7 +924,7 @@ def document_prompt(
     if prompt_lens:
         prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
     prompt_lines.extend(["", *status_transition_review_lines(phase)])
-    prompt_lines.extend(["", *docs_first_review_lines(primary_source)])
+    prompt_lines.extend(["", *docs_first_review_lines(primary_source, current_user_request)])
     prompt_lines.extend(
         [
             "",
@@ -946,6 +959,7 @@ def implementation_prompt(
     config: dict[str, Any],
     stage: dict[str, Any],
     round_number: int,
+    current_user_request: str = "",
     prompt_lens: str | None = None,
 ) -> str:
     prompt_lines = [
@@ -973,7 +987,7 @@ def implementation_prompt(
     if prompt_lens:
         prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
     prompt_lines.extend(["", *status_transition_review_lines("implement")])
-    prompt_lines.extend(["", *docs_first_review_lines("the task file and the provided workflow references")])
+    prompt_lines.extend(["", *docs_first_review_lines("the task file and the provided workflow references", current_user_request)])
     prompt_lines.extend(["", *severity_guidance_lines(config, stage, round_number)])
     prompt_lines.extend(
         [
@@ -1007,6 +1021,7 @@ def build_document_reviewer_requests(
     config: dict[str, Any],
     stage: dict[str, Any],
     round_number: int,
+    current_user_request: str = "",
 ) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
     for reviewer_profile in cast(list[dict[str, Any]], stage["reviewer_profiles"]):
@@ -1020,6 +1035,7 @@ def build_document_reviewer_requests(
                     config,
                     stage,
                     round_number,
+                    current_user_request,
                     cast(str | None, reviewer_profile.get("document_prompt_lens")),
                 ),
             }
@@ -1033,6 +1049,7 @@ def build_implementation_reviewer_requests(
     config: dict[str, Any],
     stage: dict[str, Any],
     round_number: int,
+    current_user_request: str = "",
 ) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
     for reviewer_profile in cast(list[dict[str, Any]], stage["reviewer_profiles"]):
@@ -1045,6 +1062,7 @@ def build_implementation_reviewer_requests(
                     config,
                     stage,
                     round_number,
+                    current_user_request,
                     cast(str | None, reviewer_profile.get("implementation_prompt_lens")),
                 ),
             }
@@ -1769,6 +1787,7 @@ def handle_finish(args: argparse.Namespace) -> int:
                 config,
                 review_stage,
                 next_round,
+                arguments,
             ),
         )
         if not ok or not result:
@@ -1838,6 +1857,7 @@ def handle_review_task(args: argparse.Namespace) -> int:
             config,
             review_stage,
             next_round,
+            str(payload.get("arguments", "")),
         ),
     )
     if not ok or not result:

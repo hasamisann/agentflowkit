@@ -24,6 +24,18 @@ Terminology:
 - ``codex exec` review gate` means the mandatory read-only reviewer launched by `.workflow/scripts/review_driver.py`.
 - `.workflow/config/codex-review.toml` configures only the review gate; it is not interactive Codex CLI configuration.
 
+## Authority And Conflict Resolution
+
+When instructions, specs, and review findings conflict, resolve them in this order:
+
+1. Current explicit user instructions
+2. Applicable spec and workflow documents
+3. `codex exec` review gate findings
+
+Applicable spec and workflow documents include `CYCLE.md`, `INVESTIGATION.md`, task files, `dependencies.md`, `.workflow/project_context.md`, and the procedures under `.workflow/procedures/`.
+
+Review findings are mandatory to address only when they are valid under higher-priority sources. If a review finding conflicts with a current user instruction or an applicable spec/workflow document, do not apply that finding as-is; report the conflict and follow the higher-priority source. If the higher-priority source is ambiguous, stop and ask the user before changing the artifact or implementation.
+
 `specify-design` starts with `grill-me` inside the phase. `grill-me` is not a separate workflow phase.
 
 Main flow: `INIT -> SPECIFY-DESIGN -> PLAN-TASKS -> IMPLEMENT`
@@ -86,10 +98,10 @@ Review invariants:
 - during review, treat the phase-defined in-progress status as correct (`DRAFT`, `PENDING`, or `ACTIVE` as applicable); do not block only because a later status transition has not happened yet
 - for implementation reviews, include the full task file contents and verify tests, implementation, refactor, verify commands, and done condition against that task
 - one review stage round launches that stage's configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
-- every reviewer in a stage round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them
+- every reviewer in a stage round performs an authority-order review before the normal review; the current user request is authoritative over the provided documents, and the provided documents are authoritative over review findings
 - for `plan-tasks` document reviews, include the active cycle `CYCLE.md` as a required reference
-- for implementation reviews, treat the task file as the source of truth for task-specific requirements
-- if an implementation review conflicts with the task file, the task file wins
+- for implementation reviews, treat the task file as the source of truth for task-specific requirements unless the current user request explicitly supersedes it
+- if an implementation review conflicts with the task file, the task file wins unless the current user request explicitly supersedes it
 - default severity intent: `CRITICAL` = must fix before completion, `MAJOR` = rule/spec violation or release-inappropriate, `MIDDLE` = non-blocking but undesirable, `MINOR` = non-blocking and light
 - default review settings are a 10-round `screening` stage with `baseline-high` and `edge-state-verify-high`, followed by an unlimited `final-xhigh` stage with `baseline-xhigh`; `blocking_severities = ["critical", "major"]`
 

@@ -6,6 +6,16 @@ Use this procedure whenever a workflow step creates one document or completes on
 
 Do not treat an artifact as complete until every configured `codex exec` review stage reports no blocking findings.
 
+## Authority Order
+
+When the current user request, spec/workflow documents, and review findings conflict, resolve them in this order:
+
+1. Current explicit user instructions
+2. Applicable spec and workflow documents
+3. `codex exec` review gate findings
+
+Review findings are required to drive changes only when they are valid under the higher-priority sources. If a review finding conflicts with the current user request or an applicable spec/workflow document, report the conflict, follow the higher-priority source, and ask the user when the higher-priority source is ambiguous.
+
 ## Required Loop
 
 1. Create or implement the artifact.
@@ -26,8 +36,8 @@ Do not treat an artifact as complete until every configured `codex exec` review 
 12. Complete only after the final configured stage reports no blocking findings.
 13. If any bounded review stage reaches its turn limit, stop and report the remaining blocking findings instead of continuing to loop.
 
-One review stage round means the driver launches that stage's configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
-The provided documents are the source of truth for the stage round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
+One review stage round means the driver launches that stage's configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs an authority-order review followed by the normal review, and the driver then merges their results into one canonical review result.
+The current user request is authoritative over the provided documents, and the provided documents are authoritative over review findings. Reviewers must not emit findings or suggested fixes that conflict with a higher-priority source. If higher-priority sources conflict with each other, reviewers must report that conflict instead of inventing a resolution.
 During content review, the phase-defined in-progress status is the correct status for the artifact or task being reviewed. Reviewers must not emit blocking findings that only demand a later allowed status transition before the workflow reaches that transition point.
 
 ## Required Review-Gate Settings
@@ -102,7 +112,7 @@ Then run this after Verify and before marking the task `DONE` for each task file
 python ".workflow/scripts/review_driver.py" review-task --interface opencode --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"
 ```
 
-This implementation review injects the full task file contents into the `codex exec` prompt, treats that task file as the source of truth for task-specific requirements, and always treats the task file as authoritative if a normal review instinct would conflict with it. The driver streams the prompt over stdin and requires the `codex exec` reviewer to verify the current code changes, tests, refactor, verification commands, and done condition against that task. Re-run `prepare --phase implement` before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
+This implementation review injects the full task file contents into the `codex exec` prompt, treats the current user request as authoritative over that task file, and treats that task file as authoritative over normal review instincts. The driver streams the prompt over stdin and requires the `codex exec` reviewer to verify the current code changes, tests, refactor, verification commands, and done condition against that task. Re-run `prepare --phase implement` before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
 
 ## Scope Rules
 
@@ -112,6 +122,6 @@ This implementation review injects the full task file contents into the `codex e
 - For document phases, do not rely on the `codex exec` reviewer to read the artifact from disk; the driver must inline the artifact contents into the prompt.
 - For `plan-tasks` document reviews, inline the active cycle `CYCLE.md` and treat it as a required reference before review starts.
 - For implementation tasks, run one review per task before its commit and track review rounds per task file.
-- For implementation reviews, inline the full task file and treat it as the source of truth for task-specific requirements.
-- If an implementation review conflicts with the task file, treat the task file as authoritative and resolve the conflict in favor of the task.
+- For implementation reviews, inline the full task file and treat it as the source of truth for task-specific requirements unless the current user request explicitly supersedes it.
+- If an implementation review conflicts with the task file, treat the task file as authoritative and resolve the conflict in favor of the task unless the current user request explicitly supersedes it.
 - Treat `approved: true` and an empty `findings` array as the only success condition; `advisory_findings` may remain.

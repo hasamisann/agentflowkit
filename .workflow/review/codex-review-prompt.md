@@ -8,7 +8,8 @@ Use this as a prompt shape when calling `codex exec` for workflow review-gate ru
 Review the <artifact-type> at <artifact-path>.
 
 Phase: <phase-name>
-Current review round: <X>/<10>
+Current review stage: <stage-name>
+Current review round: <X>/<stage-limit-or-unlimited>
 
 Acceptance requirements:
 - <requirement 1>
@@ -40,7 +41,8 @@ Review the implementation for task file <task-file-path>.
 Phase: implement
 Artifact type: implementation-task
 Artifact path: <task-file-path>
-Current review round: <X>/<10>
+Current review stage: <stage-name>
+Current review round: <X>/<stage-limit-or-unlimited>
 
 Acceptance requirements:
 - The implementation follows the task file exactly.

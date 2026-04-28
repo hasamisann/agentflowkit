@@ -64,12 +64,14 @@ Every workflow artifact and every implementation task must complete this loop be
 1. create or implement the artifact
 2. initialize review state at the start of artifact creation for that workflow step; for `specify-design`, do this only immediately before the first `CYCLE.md` draft-side effect after `grill-me`
 3. if the user provides manual review feedback, asks for re-review after a prior completion, or explicitly asks to reset review rounds, re-initialize review state before the next workflow review
-4. run one read-only `codex exec` review round
+4. run the first configured read-only `codex exec` review stage
 5. validate findings before applying them
 6. fix valid `CRITICAL` and `MAJOR` findings
 7. optionally fix valid `MIDDLE` and `MINOR` findings
 8. if a blocking finding appears incorrect or ambiguous, ask the user before changing the artifact
-9. repeat until there are no blocking findings or the target reaches the maximum review turn count
+9. repeat the first stage until there are no blocking findings or the target reaches that stage's maximum review turn count
+10. run each later stage in order; if a later stage reports a blocking finding, fix it, reset that target's review rounds, and restart from the first stage
+11. treat the artifact or task as complete only after the final configured stage reports no blocking findings
 
 Applies to `CYCLE.md`, `manifest.md`, `cycle_index.md`, `INVESTIGATION.md`, `.workflow/project_context.md`, `.github/workflows/ci.yml`, each task file, each `dependencies.md`, and each implementation task's code changes.
 
@@ -83,13 +85,13 @@ Review invariants:
 - never finalize a document, mark a task `DONE`, or create a reviewed implementation commit while blocking findings remain
 - during review, treat the phase-defined in-progress status as correct (`DRAFT`, `PENDING`, or `ACTIVE` as applicable); do not block only because a later status transition has not happened yet
 - for implementation reviews, include the full task file contents and verify tests, implementation, refactor, verify commands, and done condition against that task
-- one review round launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
-- every reviewer in a round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them
+- one review stage round launches that stage's configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, then merges their results into the canonical review result
+- every reviewer in a stage round performs a docs-first review before the normal review; the provided documents are the source of truth and reviewers must not emit findings that contradict them
 - for `plan-tasks` document reviews, include the active cycle `CYCLE.md` as a required reference
 - for implementation reviews, treat the task file as the source of truth for task-specific requirements
 - if an implementation review conflicts with the task file, the task file wins
 - default severity intent: `CRITICAL` = must fix before completion, `MAJOR` = rule/spec violation or release-inappropriate, `MIDDLE` = non-blocking but undesirable, `MINOR` = non-blocking and light
-- default review settings are `parallel_reviews = 3`, `max_review_turns = 10`, and `blocking_severities = ["critical", "major"]`
+- default review settings are a 10-round `screening` stage with `baseline-high` and `edge-state-verify-high`, followed by an unlimited `final-xhigh` stage with `baseline-xhigh`; `blocking_severities = ["critical", "major"]`
 
 Use `.workflow/procedures/review-loop.md` and `.workflow/scripts/review_driver.py` for the concrete command shapes.
 

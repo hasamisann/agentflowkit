@@ -35,7 +35,7 @@ Implement one task or every task in one requested wave.
     - fix valid `CRITICAL` and `MAJOR` findings
     - optionally apply valid `MIDDLE` and `MINOR` findings
     - if a blocking finding appears incorrect or ambiguous, ask the user before changing the implementation
-12. Repeat the `codex exec` review-gate loop until the task has no blocking findings or reaches the configured review turn limit.
+12. Repeat the `codex exec` review-gate loop until the task has no blocking findings in every configured stage or reaches a bounded stage's review turn limit. If a later stage reports a blocking finding, fix it and restart from the first stage with that task's review rounds reset.
 13. Re-run the relevant verification after review-driven fixes.
 14. Mark the task `DONE`.
 15. Mark the matching `dependencies.md` row `DONE`.
@@ -48,7 +48,7 @@ Implement one task or every task in one requested wave.
 - If a verify command fails, fix it before review or marking the task `DONE`.
 - A task may be marked `DONE` without creating a commit.
 - If the user explicitly asks for a commit, create it only after the task has no blocking review findings.
-- If the review turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
+- If a bounded review stage's turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
 - If one task in a wave fails, stop and report before attempting later tasks in the same wave.
 - Review findings must not contradict the task file or the provided workflow documents; if those documents conflict, report the conflict explicitly.
 - If a `codex exec` review conflicts with the task file, always treat the task file as correct and do not change the implementation only to satisfy the conflicting review.

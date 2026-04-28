@@ -33,4 +33,4 @@ Break one finalized bug investigation into atomic fix tasks.
 - `dependencies.md` is the task execution index used by `/implement bug <bug-id> wave <N>` and must stay synchronized with task-file status.
 - After you fix your own review findings, do not re-initialize the review state. Rerun the phase `finish` using the existing state.
 - Because the `finish` pass rechecks the phase artifact set, prefer batching obviously related contract fixes across fix task files and `dependencies.md` before rerunning review.
-- If a later review pass unexpectedly returns to `round 1/<N>` after a prior round in the same invocation, stop and verify whether `prepare` was rerun or the review state was otherwise reset.
+- If a later review pass unexpectedly returns to `round 1/<N>` after a prior round in the same invocation, stop and verify whether `prepare` was rerun or the review state was otherwise reset. A reset is expected after a later review stage reports a blocking finding.

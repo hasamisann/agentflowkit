@@ -4,14 +4,14 @@ Use this procedure whenever a workflow step creates one document or completes on
 
 ## Goal
 
-Do not treat an artifact as complete until the merged `codex exec` review reports no blocking findings.
+Do not treat an artifact as complete until every configured `codex exec` review stage reports no blocking findings.
 
 ## Required Loop
 
 1. Create or implement the artifact.
 2. At the start of artifact creation for that phase, initialize the review state for that phase.
 3. If the user provides manual review feedback, asks for re-review after a prior completion, or explicitly asks to reset review rounds, re-initialize the review state before the next workflow review.
-4. Run one read-only `codex exec` review round for that artifact.
+4. Run the first configured read-only `codex exec` review stage for that artifact.
 5. Validate the findings before applying them:
    - `CRITICAL`: must be fixed before completion.
    - `MAJOR`: violates workflow/spec/task requirements or is inappropriate for release quality.
@@ -20,28 +20,31 @@ Do not treat an artifact as complete until the merged `codex exec` review report
 6. Fix valid `CRITICAL` and `MAJOR` findings.
 7. Optionally fix valid `MIDDLE` and `MINOR` findings.
 8. If a blocking finding appears incorrect or ambiguous, stop and ask the user before changing the artifact.
-9. Repeat until the merged review result contains no blocking findings or the target reaches the maximum review turn count.
-10. If the review turn limit is reached, stop and report the remaining blocking findings instead of continuing to loop.
+9. Repeat the first stage until its merged review result contains no blocking findings or the target reaches that stage's maximum review turn count.
+10. After the first stage passes, run the next configured review stage.
+11. If any later stage reports a blocking finding, fix it, reset that target's review rounds, and restart from the first stage.
+12. Complete only after the final configured stage reports no blocking findings.
+13. If any bounded review stage reaches its turn limit, stop and report the remaining blocking findings instead of continuing to loop.
 
-One review round means the driver launches the configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
-The provided documents are the source of truth for the round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
+One review stage round means the driver launches that stage's configured parallel reviewers with reviewer-specific prompts derived from the same target artifact and shared references, each reviewer performs a docs-first review followed by the normal review, and the driver then merges their results into one canonical review result.
+The provided documents are the source of truth for the stage round. Reviewers must not emit findings or suggested fixes that conflict with those documents. If the provided documents conflict with each other, reviewers must report that document conflict instead of inventing a resolution.
 During content review, the phase-defined in-progress status is the correct status for the artifact or task being reviewed. Reviewers must not emit blocking findings that only demand a later allowed status transition before the workflow reaches that transition point.
 
 ## Required Review-Gate Settings
 
 - all review-gate settings come from `.workflow/config/codex-review.toml`
-- change review-gate settings only in `.workflow/config/codex-review.toml`; that file is the single source of truth for the `codex exec` reviewer model, sandbox, reasoning effort, output schema, prompt transport, document review mode, parallelism, blocking severities, and maximum review turns
+- change review-gate settings only in `.workflow/config/codex-review.toml`; that file is the single source of truth for the `codex exec` reviewer model, sandbox, reasoning effort, output schema, prompt transport, document review mode, review stages, stage parallelism, blocking severities, and stage turn limits
 - `.workflow/config/codex-review.toml` does not configure human-facing interactive Codex CLI sessions
 - write one canonical review log per command invocation under `logs/reviews/`
 - overwrite that same canonical review log on each review round during the command invocation
 - reviewer-specific raw logs may be written alongside the canonical log as transient diagnostics
-- default settings are `parallel_reviews = 3`, `max_review_turns = 10`, and `blocking_severities = ["critical", "major"]`
+- default settings are a `screening` stage with `baseline-high` and `edge-state-verify-high` reviewers for 10 rounds, followed by an unlimited `final-xhigh` stage with `baseline-xhigh`; blocking severities are `["critical", "major"]`
 
 ## Helper Script
 
 Use `.workflow/scripts/review_driver.py` instead of hand-assembling review commands.
 Do not invoke `codex exec` directly for workflow reviews.
-The driver streams reviewer-specific prompts over stdin, inlines document contents for document-phase reviews, fans each review round out to the configured parallel reviewer count, applies each reviewer's configured reasoning effort and prompt lens, merges the results, and records diagnostics under `logs/reviews/`.
+The driver streams reviewer-specific prompts over stdin, inlines document contents for document-phase reviews, fans each review stage round out to that stage's configured reviewer count, applies each reviewer's configured reasoning effort and prompt lens, merges the results, and records diagnostics under `logs/reviews/`.
 
 ### Prepare a document-phase review
 
@@ -83,7 +86,7 @@ Correct sequence:
 4. fix that artifact and any obviously related contract gaps in the same phase artifact set
 5. run `finish` again without rerunning `prepare`
 
-If a later pass in the same invocation unexpectedly returns to `round 1/<max_review_turns>` after a prior round already ran, stop and verify whether the review state was reset before continuing.
+If a later pass in the same invocation unexpectedly returns to `round 1/<max_review_turns>` after a prior round already ran, stop and verify whether the review state was reset before continuing. A reset is expected after a later review stage reports a blocking finding.
 
 ### Review one implementation task
 
@@ -104,7 +107,7 @@ This implementation review injects the full task file contents into the `codex e
 ## Scope Rules
 
 - Review exactly one target artifact at a time.
-- One target review round may use multiple parallel reviewers, but it still produces one merged canonical result.
+- One target review stage round may use multiple parallel reviewers, but it still produces one merged canonical result.
 - For document phases, reuse the same review log path for the full command invocation and track review rounds per artifact file.
 - For document phases, do not rely on the `codex exec` reviewer to read the artifact from disk; the driver must inline the artifact contents into the prompt.
 - For `plan-tasks` document reviews, inline the active cycle `CYCLE.md` and treat it as a required reference before review starts.

@@ -136,9 +136,17 @@ class ReviewDriverTestCase(unittest.TestCase):
                     'output_schema = ".workflow/review/codex-review-schema.json"',
                     'prompt_transport = "stdin"',
                     'document_review_mode = "inline-artifact"',
-                    'parallel_reviews = 3',
-                    'max_review_turns = 10',
                     'blocking_severities = ["critical", "major"]',
+                    '',
+                    '[[review_stages]]',
+                    'label = "screening"',
+                    'max_review_turns = 10',
+                    'reviewer_labels = ["baseline-high", "edge-state-verify-high"]',
+                    '',
+                    '[[review_stages]]',
+                    'label = "final-xhigh"',
+                    'max_review_turns = "unlimited"',
+                    'reviewer_labels = ["baseline-xhigh"]',
                     '',
                     '[[reviewer_profiles]]',
                     'label = "baseline-high"',
@@ -169,11 +177,9 @@ class ReviewDriverTestCase(unittest.TestCase):
 
 
 class LoadReviewConfigTests(ReviewDriverTestCase):
-    def test_load_review_config_reads_parallel_settings_and_profiles(self) -> None:
+    def test_load_review_config_reads_stage_settings_and_profiles(self) -> None:
         config = review_driver.load_review_config(self.root)
 
-        self.assertEqual(config["parallel_reviews"], 3)
-        self.assertEqual(config["max_review_turns"], 10)
         self.assertEqual(config["blocking_severities"], ["critical", "major"])
         self.assertEqual(
             [profile["label"] for profile in config["reviewer_profiles"]],
@@ -183,37 +189,18 @@ class LoadReviewConfigTests(ReviewDriverTestCase):
             [profile["model_reasoning_effort"] for profile in config["reviewer_profiles"]],
             ["high", "xhigh", "high"],
         )
-
-    def test_load_review_config_falls_back_to_top_level_effort(self) -> None:
-        write_file(
-            self.root / ".workflow" / "config" / "codex-review.toml",
-            "\n".join(
-                [
-                    'model = "gpt-5.4"',
-                    'sandbox = "read-only"',
-                    'model_reasoning_effort = "xhigh"',
-                    'output_schema = ".workflow/review/codex-review-schema.json"',
-                    'prompt_transport = "stdin"',
-                    'document_review_mode = "inline-artifact"',
-                    'parallel_reviews = 3',
-                    'max_review_turns = 10',
-                    'blocking_severities = ["critical", "major"]',
-                    '',
-                ]
-            ),
-        )
-
-        config = review_driver.load_review_config(self.root)
-
-        self.assertEqual(config["model_reasoning_effort"], "xhigh")
-        self.assertEqual(len(config["reviewer_profiles"]), 3)
+        self.assertEqual([stage["label"] for stage in config["review_stages"]], ["screening", "final-xhigh"])
+        self.assertEqual([stage["max_review_turns"] for stage in config["review_stages"]], [10, None])
         self.assertEqual(
-            [profile["label"] for profile in config["reviewer_profiles"]],
-            ["reviewer-1", "reviewer-2", "reviewer-3"],
+            [profile["label"] for profile in config["review_stages"][0]["reviewer_profiles"]],
+            ["baseline-high", "edge-state-verify-high"],
         )
-        self.assertTrue(all(profile["model_reasoning_effort"] == "xhigh" for profile in config["reviewer_profiles"]))
+        self.assertEqual(
+            [profile["label"] for profile in config["review_stages"][1]["reviewer_profiles"]],
+            ["baseline-xhigh"],
+        )
 
-    def test_load_review_config_rejects_profile_count_mismatch(self) -> None:
+    def test_load_review_config_rejects_missing_review_stages(self) -> None:
         write_file(
             self.root / ".workflow" / "config" / "codex-review.toml",
             "\n".join(
@@ -223,23 +210,45 @@ class LoadReviewConfigTests(ReviewDriverTestCase):
                     'output_schema = ".workflow/review/codex-review-schema.json"',
                     'prompt_transport = "stdin"',
                     'document_review_mode = "inline-artifact"',
-                    'parallel_reviews = 3',
-                    'max_review_turns = 10',
                     'blocking_severities = ["critical", "major"]',
                     '',
                     '[[reviewer_profiles]]',
                     'label = "baseline-high"',
                     'model_reasoning_effort = "high"',
                     '',
+                ]
+            ),
+        )
+
+        with self.assertRaisesRegex(ValueError, "review_stages"):
+            review_driver.load_review_config(self.root)
+
+    def test_load_review_config_rejects_unknown_stage_reviewer(self) -> None:
+        write_file(
+            self.root / ".workflow" / "config" / "codex-review.toml",
+            "\n".join(
+                [
+                    'model = "gpt-5.4"',
+                    'sandbox = "read-only"',
+                    'output_schema = ".workflow/review/codex-review-schema.json"',
+                    'prompt_transport = "stdin"',
+                    'document_review_mode = "inline-artifact"',
+                    'blocking_severities = ["critical", "major"]',
+                    '',
+                    '[[review_stages]]',
+                    'label = "screening"',
+                    'max_review_turns = 10',
+                    'reviewer_labels = ["baseline-high", "missing-reviewer"]',
+                    '',
                     '[[reviewer_profiles]]',
-                    'label = "baseline-xhigh"',
-                    'model_reasoning_effort = "xhigh"',
+                    'label = "baseline-high"',
+                    'model_reasoning_effort = "high"',
                     '',
                 ]
             ),
         )
 
-        with self.assertRaisesRegex(ValueError, "parallel_reviews"):
+        with self.assertRaisesRegex(ValueError, "missing-reviewer"):
             review_driver.load_review_config(self.root)
 
 
@@ -259,8 +268,6 @@ class BuildCodexCommandTests(ReviewDriverTestCase):
 class MergeReviewResultsTests(unittest.TestCase):
     def test_merge_review_results_keeps_blocking_and_advisory_separate(self) -> None:
         config = {
-            "parallel_reviews": 3,
-            "max_review_turns": 10,
             "blocking_severities": ["critical", "major"],
         }
         reviewer_profiles = [
@@ -326,6 +333,7 @@ class MergeReviewResultsTests(unittest.TestCase):
             artifact_type="implementation-task",
             artifact_path="task.md",
             task_file_path="task.md",
+            review_stage={"label": "screening", "max_review_turns": 10, "reviewer_profiles": reviewer_profiles},
             review_round=1,
             config=config,
             raw_log_paths=[Path("r1.json"), Path("r2.json"), Path("r3.json")],
@@ -343,6 +351,8 @@ class MergeReviewResultsTests(unittest.TestCase):
         self.assertEqual(result["reviewers"][1]["model_reasoning_effort"], "xhigh")
         self.assertEqual(result["reviewers"][2]["document_prompt_lens"], "document lens")
         self.assertEqual(result["reviewers"][2]["implementation_prompt_lens"], "implementation lens")
+        self.assertEqual(result["review_stage"], "screening")
+        self.assertEqual(result["parallel_reviews"], 3)
 
 
 class PromptConstructionTests(ReviewDriverTestCase):
@@ -350,7 +360,8 @@ class PromptConstructionTests(ReviewDriverTestCase):
         cycle_doc, _, _ = create_cycle_artifacts(self.root)
 
         config = review_driver.load_review_config(self.root)
-        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "specify-design", cycle_doc, config, 1)
+        stage = config["review_stages"][0]
+        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "specify-design", cycle_doc, config, stage, 1)
         prompt = reviewer_requests[0]["prompt"]
 
         self.assertIn("Status transition rules:", prompt)
@@ -369,8 +380,9 @@ class PromptConstructionTests(ReviewDriverTestCase):
         write_file(artifact_path, "# Project Context\n")
 
         config = review_driver.load_review_config(self.root)
-        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "plan-tasks", artifact_path, config, 1)
-        prompt = reviewer_requests[2]["prompt"]
+        stage = config["review_stages"][0]
+        reviewer_requests = review_driver.build_document_reviewer_requests(self.root, "plan-tasks", artifact_path, config, stage, 1)
+        prompt = reviewer_requests[1]["prompt"]
 
         self.assertIn(review_driver.read_text_file(cycle_doc), prompt)
         self.assertIn("Review order:", prompt)
@@ -389,17 +401,17 @@ class PromptConstructionTests(ReviewDriverTestCase):
         self.assertIn("Do not report findings or suggested fixes that conflict with the provided documents.", prompt)
         self.assertIn("The artifact complies with the active cycle design and requirements in CYCLE.md.", prompt)
         self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
-        self.assertNotIn("Priority review lens:", reviewer_requests[1]["prompt"])
         self.assertIn("Priority review lens:", prompt)
-        self.assertIn(config["reviewer_profiles"][2]["document_prompt_lens"], prompt)
+        self.assertIn(stage["reviewer_profiles"][1]["document_prompt_lens"], prompt)
 
     def test_implementation_prompt_uses_task_file_as_source_of_truth_and_implementation_lens(self) -> None:
         task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
         write_file(task_path, "# Task\n\n## Done\n\n- done\n")
 
         config = review_driver.load_review_config(self.root)
-        reviewer_requests = review_driver.build_implementation_reviewer_requests(self.root, task_path, config, 1)
-        prompt = reviewer_requests[2]["prompt"]
+        stage = config["review_stages"][0]
+        reviewer_requests = review_driver.build_implementation_reviewer_requests(self.root, task_path, config, stage, 1)
+        prompt = reviewer_requests[1]["prompt"]
 
         self.assertIn("Treat the task file as the source of truth for task-specific requirements in this review.", prompt)
         self.assertIn(
@@ -415,9 +427,8 @@ class PromptConstructionTests(ReviewDriverTestCase):
         self.assertIn("Reference: .workflow/procedures/implement.md", prompt)
         self.assertIn(review_driver.read_text_file(task_path), prompt)
         self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
-        self.assertNotIn("Priority review lens:", reviewer_requests[1]["prompt"])
         self.assertIn("Priority review lens:", prompt)
-        self.assertIn(config["reviewer_profiles"][2]["implementation_prompt_lens"], prompt)
+        self.assertIn(stage["reviewer_profiles"][1]["implementation_prompt_lens"], prompt)
 
 
 class PrematureStatusFindingSuppressionTests(ReviewDriverTestCase):
@@ -485,18 +496,29 @@ class PrematureStatusFindingSuppressionTests(ReviewDriverTestCase):
 
 class RoundTrackingTests(ReviewDriverTestCase):
     def test_peek_next_round_stops_after_limit(self) -> None:
-        payload = {"rounds": {"artifact.md": 9}}
+        payload = {"rounds": {"artifact.md": {"screening": 9}}}
+        stage = {"label": "screening", "max_review_turns": 10}
 
-        can_review, next_round, message = review_driver.peek_next_round(payload, "artifact.md", 10)
+        can_review, next_round, message = review_driver.peek_next_round(payload, "artifact.md", stage)
         self.assertTrue(can_review)
         self.assertEqual(next_round, 10)
         self.assertEqual(message, "")
 
-        review_driver.mark_round_used(payload, "artifact.md", next_round)
-        can_review, current_round, message = review_driver.peek_next_round(payload, "artifact.md", 10)
+        review_driver.mark_round_used(payload, "artifact.md", stage, next_round)
+        can_review, current_round, message = review_driver.peek_next_round(payload, "artifact.md", stage)
         self.assertFalse(can_review)
         self.assertEqual(current_round, 10)
         self.assertIn("Review turn limit reached", message)
+
+    def test_peek_next_round_allows_unlimited_stage(self) -> None:
+        payload = {"rounds": {"artifact.md": {"final-xhigh": 200}}}
+        stage = {"label": "final-xhigh", "max_review_turns": None}
+
+        can_review, next_round, message = review_driver.peek_next_round(payload, "artifact.md", stage)
+
+        self.assertTrue(can_review)
+        self.assertEqual(next_round, 201)
+        self.assertEqual(message, "")
 
     def test_prepare_resets_existing_review_rounds(self) -> None:
         stale_state = review_driver.state_path(self.root, "opencode", "implement", None)
@@ -506,7 +528,7 @@ class RoundTrackingTests(ReviewDriverTestCase):
                 "interface": "opencode",
                 "phase": "implement",
                 "arguments": "wave 1",
-                "rounds": {"task.md": 7},
+                "rounds": {"task.md": {"screening": 7}},
                 "approved_hashes": {"artifact.md": "abc123"},
                 "approved_snapshots": {"artifact.md": "snapshot"},
                 "awaiting_user_approval": True,
@@ -712,7 +734,89 @@ class ReviewTaskTests(ReviewDriverTestCase):
         self.assertIsNotNone(state)
         if state is None:
             self.fail("review task did not persist state")
-        self.assertEqual(state["rounds"][task_path.as_posix()], 1)
+        self.assertEqual(state["rounds"][task_path.as_posix()], {"screening": 1, "final-xhigh": 1})
+
+    def test_review_task_stops_at_screening_blocker_without_final_stage(self) -> None:
+        task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
+        write_file(task_path, "# Task\n")
+        payload = review_driver.fresh_state_payload(
+            self.root,
+            "opencode",
+            "implement",
+            None,
+            task_path.as_posix(),
+            self.root / ".workflow" / "config" / "codex-review.toml",
+        )
+        review_driver.write_state(review_driver.state_path(self.root, "opencode", "implement", None), payload)
+
+        blocking_result = merged_review_result(
+            [
+                {
+                    "severity": "major",
+                    "title": "Missing required test",
+                    "details": "The task requires a failing test first.",
+                    "location": task_path.as_posix(),
+                    "suggested_fix": "Add the regression test.",
+                }
+            ]
+        )
+        blocking_result["review_stage"] = "screening"
+
+        with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, blocking_result, "")) as run_codex_parallel:
+            args = argparse.Namespace(interface="opencode", task_file=task_path.as_posix(), session_id=None)
+            with contextlib.redirect_stderr(io.StringIO()):
+                result = review_driver.handle_review_task(args)
+
+        state = review_driver.read_state(review_driver.state_path(self.root, "opencode", "implement", None))
+        self.assertEqual(result, 1)
+        self.assertEqual(run_codex_parallel.call_count, 1)
+        self.assertIsNotNone(state)
+        if state is None:
+            self.fail("review task did not persist state")
+        self.assertEqual(state["rounds"][task_path.as_posix()], {"screening": 1})
+
+    def test_review_task_resets_rounds_after_final_stage_blocker(self) -> None:
+        task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
+        write_file(task_path, "# Task\n")
+        payload = review_driver.fresh_state_payload(
+            self.root,
+            "opencode",
+            "implement",
+            None,
+            task_path.as_posix(),
+            self.root / ".workflow" / "config" / "codex-review.toml",
+        )
+        review_driver.write_state(review_driver.state_path(self.root, "opencode", "implement", None), payload)
+
+        final_blocking_result = merged_review_result(
+            [
+                {
+                    "severity": "major",
+                    "title": "Verification is incomplete",
+                    "details": "The final reviewer found a missing verify command.",
+                    "location": task_path.as_posix(),
+                    "suggested_fix": "Run every verify command from the task file.",
+                }
+            ]
+        )
+        final_blocking_result["review_stage"] = "final-xhigh"
+
+        with mock.patch.object(
+            review_driver,
+            "run_codex_parallel",
+            side_effect=[(True, approved_review_result(), ""), (True, final_blocking_result, "")],
+        ) as run_codex_parallel:
+            args = argparse.Namespace(interface="opencode", task_file=task_path.as_posix(), session_id=None)
+            with contextlib.redirect_stderr(io.StringIO()):
+                result = review_driver.handle_review_task(args)
+
+        state = review_driver.read_state(review_driver.state_path(self.root, "opencode", "implement", None))
+        self.assertEqual(result, 1)
+        self.assertEqual(run_codex_parallel.call_count, 2)
+        self.assertIsNotNone(state)
+        if state is None:
+            self.fail("review task did not persist state")
+        self.assertNotIn(task_path.as_posix(), state["rounds"])
 
 
 if __name__ == "__main__":

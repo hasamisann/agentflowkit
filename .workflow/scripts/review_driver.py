@@ -27,8 +27,7 @@ FINISH_PHASES = ["specify-design", "plan-tasks", "investigate", "fix-tasks"]
 REVIEW_CONFIG_PATH = Path(".workflow") / "config" / "codex-review.toml"
 SUPPORTED_PROMPT_TRANSPORTS = {"stdin"}
 SUPPORTED_DOCUMENT_REVIEW_MODES = {"inline-artifact"}
-DEFAULT_PARALLEL_REVIEWS = 3
-DEFAULT_MAX_REVIEW_TURNS = 10
+UNLIMITED_REVIEW_TURNS = "unlimited"
 DEFAULT_BLOCKING_SEVERITIES = ["critical", "major"]
 SEVERITY_ORDER = {
     "critical": 0,
@@ -87,8 +86,8 @@ def log_path(root: Path, interface: str, phase: str, session_id: str | None) -> 
     return ensure_logs_dir(root) / f"{interface}-{phase}{suffix}.json"
 
 
-def reviewer_output_path(output_path: Path, reviewer_index: int) -> Path:
-    return output_path.parent / f"{output_path.stem}.reviewer-{reviewer_index}.json"
+def reviewer_output_path(output_path: Path, stage_label: str, reviewer_index: int) -> Path:
+    return output_path.parent / f"{output_path.stem}.{slugify(stage_label)}.reviewer-{reviewer_index}.json"
 
 
 def read_text_file(path: Path) -> str:
@@ -120,11 +119,28 @@ def optional_string(config: dict[str, Any], key: str) -> str | None:
     return value.strip()
 
 
-def require_positive_int(config: dict[str, Any], key: str, default: int) -> int:
-    value = config.get(key, default)
+def require_review_turn_limit(config: dict[str, Any], key: str) -> int | None:
+    value = config.get(key)
+    if value == UNLIMITED_REVIEW_TURNS:
+        return None
     if not isinstance(value, int) or value <= 0:
-        raise ValueError(f"Review config key '{key}' must be a positive integer.")
+        raise ValueError(
+            f"Review config key '{key}' must be a positive integer or the string '{UNLIMITED_REVIEW_TURNS}'."
+        )
     return value
+
+
+def require_string_list(config: dict[str, Any], key: str) -> list[str]:
+    value = config.get(key)
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"Review config key '{key}' must be a non-empty list of strings.")
+
+    normalized: list[str] = []
+    for item in value:
+        if not isinstance(item, str) or not item.strip():
+            raise ValueError(f"Review config key '{key}' must contain only non-empty strings.")
+        normalized.append(item.strip())
+    return normalized
 
 
 def require_severity_list(config: dict[str, Any], key: str, default: list[str]) -> list[str]:
@@ -149,45 +165,64 @@ def require_severity_list(config: dict[str, Any], key: str, default: list[str]) 
 
 def normalize_reviewer_profiles(
     raw_profiles: Any,
-    parallel_reviews: int,
-    fallback_effort: str | None,
 ) -> list[dict[str, Any]]:
-    if raw_profiles is None:
-        if not fallback_effort:
-            raise ValueError(
-                "Review config must define 'reviewer_profiles' or top-level 'model_reasoning_effort'."
-            )
-        return [
-            {
-                "label": f"reviewer-{index}",
-                "model_reasoning_effort": fallback_effort,
-                "document_prompt_lens": None,
-                "implementation_prompt_lens": None,
-            }
-            for index in range(1, parallel_reviews + 1)
-        ]
-
     if not isinstance(raw_profiles, list) or not raw_profiles:
-        raise ValueError("Review config key 'reviewer_profiles' must be a non-empty array when present.")
-    if len(raw_profiles) != parallel_reviews:
-        raise ValueError(
-            "Review config key 'reviewer_profiles' must contain exactly "
-            f"{parallel_reviews} entries to match 'parallel_reviews'."
-        )
+        raise ValueError("Review config key 'reviewer_profiles' must be a non-empty array.")
 
     normalized: list[dict[str, Any]] = []
+    labels: set[str] = set()
     for index, profile in enumerate(raw_profiles, start=1):
         if not isinstance(profile, dict):
             raise ValueError(f"Review config reviewer_profiles[{index}] must be a table/object.")
+        label = require_string(profile, "label")
+        if label in labels:
+            raise ValueError(f"Review config reviewer_profiles contains duplicate label '{label}'.")
+        labels.add(label)
         normalized.append(
             {
-                "label": require_string(profile, "label"),
+                "label": label,
                 "model_reasoning_effort": require_string(profile, "model_reasoning_effort"),
                 "document_prompt_lens": optional_string(profile, "document_prompt_lens"),
                 "implementation_prompt_lens": optional_string(profile, "implementation_prompt_lens"),
             }
         )
     return normalized
+
+
+def normalize_review_stages(
+    raw_stages: Any,
+    reviewer_profiles: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    if not isinstance(raw_stages, list) or not raw_stages:
+        raise ValueError("Review config key 'review_stages' must be a non-empty array.")
+
+    profiles_by_label = {str(profile["label"]): profile for profile in reviewer_profiles}
+    stage_labels: set[str] = set()
+    stages: list[dict[str, Any]] = []
+    for index, stage in enumerate(raw_stages, start=1):
+        if not isinstance(stage, dict):
+            raise ValueError(f"Review config review_stages[{index}] must be a table/object.")
+        label = require_string(stage, "label")
+        if label in stage_labels:
+            raise ValueError(f"Review config review_stages contains duplicate label '{label}'.")
+        stage_labels.add(label)
+
+        reviewer_labels = require_string_list(stage, "reviewer_labels")
+        missing_labels = [reviewer_label for reviewer_label in reviewer_labels if reviewer_label not in profiles_by_label]
+        if missing_labels:
+            raise ValueError(
+                f"Review config stage '{label}' references unknown reviewer label(s): {', '.join(missing_labels)}."
+            )
+
+        stages.append(
+            {
+                "label": label,
+                "max_review_turns": require_review_turn_limit(stage, "max_review_turns"),
+                "reviewer_labels": reviewer_labels,
+                "reviewer_profiles": [profiles_by_label[reviewer_label] for reviewer_label in reviewer_labels],
+            }
+        )
+    return stages
 
 
 def load_review_config(root: Path) -> dict[str, Any]:
@@ -205,14 +240,12 @@ def load_review_config(root: Path) -> dict[str, Any]:
         raise ValueError("Review config key 'model' must be a non-empty string when present.")
 
     sandbox = require_string(raw, "sandbox")
-    model_reasoning_effort = optional_string(raw, "model_reasoning_effort")
     output_schema = require_string(raw, "output_schema")
     prompt_transport = require_string(raw, "prompt_transport")
     document_review_mode = require_string(raw, "document_review_mode")
-    parallel_reviews = require_positive_int(raw, "parallel_reviews", DEFAULT_PARALLEL_REVIEWS)
-    max_review_turns = require_positive_int(raw, "max_review_turns", DEFAULT_MAX_REVIEW_TURNS)
     blocking_severities = require_severity_list(raw, "blocking_severities", DEFAULT_BLOCKING_SEVERITIES)
-    reviewer_profiles = normalize_reviewer_profiles(raw.get("reviewer_profiles"), parallel_reviews, model_reasoning_effort)
+    reviewer_profiles = normalize_reviewer_profiles(raw.get("reviewer_profiles"))
+    review_stages = normalize_review_stages(raw.get("review_stages"), reviewer_profiles)
 
     if prompt_transport not in SUPPORTED_PROMPT_TRANSPORTS:
         raise ValueError(
@@ -230,15 +263,13 @@ def load_review_config(root: Path) -> dict[str, Any]:
     return {
         "model": model.strip() if isinstance(model, str) else None,
         "sandbox": sandbox,
-        "model_reasoning_effort": model_reasoning_effort,
         "output_schema": output_schema,
         "output_schema_path": schema_path,
         "prompt_transport": prompt_transport,
         "document_review_mode": document_review_mode,
-        "parallel_reviews": parallel_reviews,
-        "max_review_turns": max_review_turns,
         "blocking_severities": blocking_severities,
         "reviewer_profiles": reviewer_profiles,
+        "review_stages": review_stages,
         "config_path": config_path.resolve(),
     }
 
@@ -578,10 +609,15 @@ def reference_block(label: str, contents: str) -> str:
     return "\n".join([f"<<<{marker} START>>>", contents, f"<<<{marker} END>>>"])
 
 
-def severity_guidance_lines(config: dict[str, Any], round_number: int) -> list[str]:
+def review_turn_limit_label(max_review_turns: int | None) -> str:
+    return str(max_review_turns) if isinstance(max_review_turns, int) else UNLIMITED_REVIEW_TURNS
+
+
+def severity_guidance_lines(config: dict[str, Any], stage: dict[str, Any], round_number: int) -> list[str]:
     blocking = ", ".join(severity.upper() for severity in config["blocking_severities"])
     return [
-        f"Current review round: {round_number}/{config['max_review_turns']}",
+        f"Current review stage: {stage['label']}",
+        f"Current review round: {round_number}/{review_turn_limit_label(cast(int | None, stage['max_review_turns']))}",
         "",
         "Severity definitions:",
         "- critical: must be fixed before the artifact or task can be treated as complete.",
@@ -743,8 +779,9 @@ def should_suppress_premature_status_finding(
 
 
 def updated_review_summary(result: dict[str, Any]) -> str:
+    review_stage = str(result.get("review_stage", "review")).strip() or "review"
     review_round = coerce_non_negative_int(result.get("review_round"))
-    max_review_turns = coerce_non_negative_int(result.get("max_review_turns"))
+    max_review_turns = str(result.get("max_review_turns", "")).strip() or "0"
     reviewers = result.get("reviewers")
     reviewer_count = len(reviewers) if isinstance(reviewers, list) else 0
     findings = result.get("findings")
@@ -752,7 +789,7 @@ def updated_review_summary(result: dict[str, Any]) -> str:
     blocking_count = len(findings) if isinstance(findings, list) else 0
     advisory_count = len(advisory_findings) if isinstance(advisory_findings, list) else 0
     return (
-        f"Round {review_round}/{max_review_turns}: "
+        f"Stage {review_stage} round {review_round}/{max_review_turns}: "
         f"{reviewer_count} reviewers completed, "
         f"{blocking_count} blocking findings, "
         f"{advisory_count} advisory findings."
@@ -827,6 +864,7 @@ def document_prompt(
     phase: str,
     artifact_path: Path,
     config: dict[str, Any],
+    stage: dict[str, Any],
     round_number: int,
     prompt_lens: str | None = None,
 ) -> str:
@@ -886,7 +924,7 @@ def document_prompt(
     if phase == "plan-tasks":
         prompt_lines.append("- The artifact complies with the active cycle design and requirements in CYCLE.md.")
 
-    prompt_lines.extend(["", *severity_guidance_lines(config, round_number)])
+    prompt_lines.extend(["", *severity_guidance_lines(config, stage, round_number)])
 
     for label, path in references:
         prompt_lines.extend(["", f"Reference: {label}", reference_block(label, read_text_file(path))])
@@ -906,6 +944,7 @@ def implementation_prompt(
     root: Path,
     task_path: Path,
     config: dict[str, Any],
+    stage: dict[str, Any],
     round_number: int,
     prompt_lens: str | None = None,
 ) -> str:
@@ -935,7 +974,7 @@ def implementation_prompt(
         prompt_lines.extend(["", *prompt_lens_lines(prompt_lens)])
     prompt_lines.extend(["", *status_transition_review_lines("implement")])
     prompt_lines.extend(["", *docs_first_review_lines("the task file and the provided workflow references")])
-    prompt_lines.extend(["", *severity_guidance_lines(config, round_number)])
+    prompt_lines.extend(["", *severity_guidance_lines(config, stage, round_number)])
     prompt_lines.extend(
         [
             "",
@@ -966,10 +1005,11 @@ def build_document_reviewer_requests(
     phase: str,
     artifact_path: Path,
     config: dict[str, Any],
+    stage: dict[str, Any],
     round_number: int,
 ) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
-    for reviewer_profile in cast(list[dict[str, Any]], config["reviewer_profiles"]):
+    for reviewer_profile in cast(list[dict[str, Any]], stage["reviewer_profiles"]):
         requests.append(
             {
                 "profile": reviewer_profile,
@@ -978,6 +1018,7 @@ def build_document_reviewer_requests(
                     phase,
                     artifact_path,
                     config,
+                    stage,
                     round_number,
                     cast(str | None, reviewer_profile.get("document_prompt_lens")),
                 ),
@@ -990,10 +1031,11 @@ def build_implementation_reviewer_requests(
     root: Path,
     task_path: Path,
     config: dict[str, Any],
+    stage: dict[str, Any],
     round_number: int,
 ) -> list[dict[str, Any]]:
     requests: list[dict[str, Any]] = []
-    for reviewer_profile in cast(list[dict[str, Any]], config["reviewer_profiles"]):
+    for reviewer_profile in cast(list[dict[str, Any]], stage["reviewer_profiles"]):
         requests.append(
             {
                 "profile": reviewer_profile,
@@ -1001,6 +1043,7 @@ def build_implementation_reviewer_requests(
                     root,
                     task_path,
                     config,
+                    stage,
                     round_number,
                     cast(str | None, reviewer_profile.get("implementation_prompt_lens")),
                 ),
@@ -1189,6 +1232,7 @@ def merge_review_results(
     artifact_type: str,
     artifact_path: str,
     task_file_path: str | None,
+    review_stage: dict[str, Any],
     review_round: int,
     config: dict[str, Any],
     raw_log_paths: list[Path],
@@ -1252,8 +1296,9 @@ def merge_review_results(
     blocking_findings = [{**finding, "blocking": True} for finding in all_findings if finding["severity"] in blocking_severities]
     advisory_findings = [{**finding, "blocking": False} for finding in all_findings if finding["severity"] not in blocking_severities]
 
+    max_review_turns = review_turn_limit_label(cast(int | None, review_stage["max_review_turns"]))
     summary = (
-        f"Round {review_round}/{config['max_review_turns']}: "
+        f"Stage {review_stage['label']} round {review_round}/{max_review_turns}: "
         f"{len(reviewers)} reviewers completed, "
         f"{len(blocking_findings)} blocking findings, "
         f"{len(advisory_findings)} advisory findings."
@@ -1266,9 +1311,10 @@ def merge_review_results(
         "artifact_type": artifact_type,
         "artifact_path": artifact_path,
         "task_file_path": task_file_path,
+        "review_stage": review_stage["label"],
         "review_round": review_round,
-        "max_review_turns": config["max_review_turns"],
-        "parallel_reviews": config["parallel_reviews"],
+        "max_review_turns": max_review_turns,
+        "parallel_reviews": len(reviewers),
         "blocking_severities": list(config["blocking_severities"]),
         "findings": blocking_findings,
         "advisory_findings": advisory_findings,
@@ -1282,6 +1328,7 @@ def run_codex_parallel(
     reviewer_requests: list[dict[str, Any]],
     output_path: Path,
     config: dict[str, Any],
+    review_stage: dict[str, Any],
     phase: str,
     artifact_type: str,
     artifact_path: str,
@@ -1292,24 +1339,26 @@ def run_codex_parallel(
     codex_bin = resolve_codex_binary()
     if not codex_bin:
         return False, None, "codex executable was not found in PATH"
-    if len(reviewer_requests) != config["parallel_reviews"]:
+    reviewer_count = len(cast(list[dict[str, Any]], review_stage["reviewer_profiles"]))
+    if len(reviewer_requests) != reviewer_count:
         return (
             False,
             None,
-            "Reviewer request count does not match 'parallel_reviews': "
-            f"expected {config['parallel_reviews']}, got {len(reviewer_requests)}",
+            f"Reviewer request count does not match review stage '{review_stage['label']}': "
+            f"expected {reviewer_count}, got {len(reviewer_requests)}",
         )
 
-    raw_log_paths = [reviewer_output_path(output_path, index) for index in range(1, config["parallel_reviews"] + 1)]
-    raw_results: list[dict[str, Any] | None] = [None] * config["parallel_reviews"]
+    raw_log_paths = [reviewer_output_path(output_path, str(review_stage["label"]), index) for index in range(1, reviewer_count + 1)]
+    raw_results: list[dict[str, Any] | None] = [None] * reviewer_count
     errors: list[str] = []
 
     eprint(
-        f"[review] round {review_round}/{config['max_review_turns']}: "
-        f"launching {config['parallel_reviews']} parallel reviewers for {artifact_path}"
+        f"[review] stage {review_stage['label']} round "
+        f"{review_round}/{review_turn_limit_label(cast(int | None, review_stage['max_review_turns']))}: "
+        f"launching {reviewer_count} parallel reviewers for {artifact_path}"
     )
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=config["parallel_reviews"]) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=reviewer_count) as executor:
         futures = {}
         for index, reviewer_request in enumerate(reviewer_requests, start=1):
             futures[
@@ -1322,7 +1371,7 @@ def run_codex_parallel(
                     cast(dict[str, Any], reviewer_request["profile"]),
                     codex_bin,
                     index,
-                    config["parallel_reviews"],
+                    reviewer_count,
                 )
             ] = index
 
@@ -1349,6 +1398,7 @@ def run_codex_parallel(
         artifact_type=artifact_type,
         artifact_path=artifact_path,
         task_file_path=task_file_path,
+        review_stage=review_stage,
         review_round=review_round,
         config=config,
         raw_log_paths=raw_log_paths,
@@ -1388,7 +1438,9 @@ def advisory_summary(result: dict[str, Any]) -> str:
 
 
 def build_failure_message(artifact_path: str, result: dict[str, Any]) -> str:
-    sections = [f"`codex exec` review found blocking issues in {artifact_path}."]
+    review_stage = str(result.get("review_stage", "")).strip()
+    stage_suffix = f" during stage '{review_stage}'" if review_stage else ""
+    sections = [f"`codex exec` review found blocking issues in {artifact_path}{stage_suffix}."]
     blocking = blocking_summary(result)
     if blocking:
         sections.append(blocking)
@@ -1450,7 +1502,7 @@ def fresh_state_payload(
         "approved_hashes": {},
         "approved_snapshots": {},
         "awaiting_user_approval": False,
-        "state_version": 4,
+        "state_version": 5,
     }
 
 
@@ -1477,7 +1529,16 @@ def hydrate_state_payload(
 
     rounds = payload.get("rounds")
     if isinstance(rounds, dict):
-        state["rounds"] = {str(key): coerce_non_negative_int(value) for key, value in rounds.items()}
+        normalized_rounds: dict[str, dict[str, int]] = {}
+        for target, stage_rounds in rounds.items():
+            if not isinstance(target, str) or not isinstance(stage_rounds, dict):
+                continue
+            normalized_rounds[target] = {
+                str(stage_label): coerce_non_negative_int(round_number)
+                for stage_label, round_number in stage_rounds.items()
+                if isinstance(stage_label, str)
+            }
+        state["rounds"] = normalized_rounds
 
     approved_hashes = payload.get("approved_hashes")
     if isinstance(approved_hashes, dict):
@@ -1500,12 +1561,21 @@ def hydrate_state_payload(
     return state
 
 
-def rounds_map(payload: dict[str, Any]) -> dict[str, int]:
+def rounds_map(payload: dict[str, Any]) -> dict[str, dict[str, int]]:
     rounds = payload.get("rounds")
     if not isinstance(rounds, dict):
         rounds = {}
         payload["rounds"] = rounds
     return rounds
+
+
+def target_rounds_map(payload: dict[str, Any], target: str) -> dict[str, int]:
+    rounds = rounds_map(payload)
+    target_rounds = rounds.get(target)
+    if not isinstance(target_rounds, dict):
+        target_rounds = {}
+        rounds[target] = target_rounds
+    return target_rounds
 
 
 def approved_hashes_map(payload: dict[str, Any]) -> dict[str, str]:
@@ -1533,12 +1603,17 @@ def ensure_target_registered(payload: dict[str, Any], target: str) -> None:
         targets.append(target)
 
 
-def peek_next_round(payload: dict[str, Any], target: str, max_review_turns: int) -> tuple[bool, int, str]:
-    current_round = coerce_non_negative_int(rounds_map(payload).get(target, 0))
+def peek_next_round(payload: dict[str, Any], target: str, review_stage: dict[str, Any]) -> tuple[bool, int, str]:
+    stage_label = str(review_stage["label"])
+    max_review_turns = cast(int | None, review_stage["max_review_turns"])
+    target_rounds = rounds_map(payload).get(target, {})
+    current_round = coerce_non_negative_int(
+        target_rounds.get(stage_label, 0) if isinstance(target_rounds, dict) else 0
+    )
     next_round = current_round + 1
-    if next_round > max_review_turns:
+    if isinstance(max_review_turns, int) and next_round > max_review_turns:
         message = (
-            f"Review turn limit reached for {target}. "
+            f"Review turn limit reached for {target} in stage '{stage_label}'. "
             f"Completed {current_round}/{max_review_turns} rounds in the current review session. "
             "Wait for new user input or explicitly reset the review rounds before reviewing this target again."
         )
@@ -1546,12 +1621,63 @@ def peek_next_round(payload: dict[str, Any], target: str, max_review_turns: int)
     return True, next_round, ""
 
 
-def mark_round_used(payload: dict[str, Any], target: str, round_number: int) -> None:
-    rounds_map(payload)[target] = round_number
+def mark_round_used(payload: dict[str, Any], target: str, review_stage: dict[str, Any], round_number: int) -> None:
+    target_rounds_map(payload, target)[str(review_stage["label"])] = round_number
+
+
+def reset_target_rounds(payload: dict[str, Any], target: str) -> None:
+    rounds_map(payload).pop(target, None)
 
 
 def file_sha256(path: Path) -> str:
     return hashlib.sha256(read_bytes_file(path)).hexdigest()
+
+
+def run_staged_review_gate(
+    root: Path,
+    config: dict[str, Any],
+    payload: dict[str, Any],
+    review_log: Path,
+    phase: str,
+    artifact_type: str,
+    artifact_path: str,
+    task_file_path: str | None,
+    reviewer_request_builder: Any,
+) -> tuple[bool, dict[str, Any] | None, str]:
+    stages = cast(list[dict[str, Any]], config["review_stages"])
+    last_result: dict[str, Any] | None = None
+    for stage_index, review_stage in enumerate(stages):
+        can_review, next_round, limit_message = peek_next_round(payload, artifact_path, review_stage)
+        if not can_review:
+            return False, None, limit_message
+
+        try:
+            reviewer_requests = reviewer_request_builder(review_stage, next_round)
+        except ValueError as exc:
+            return False, None, str(exc)
+        ok, result, error_message = run_codex_parallel(
+            root,
+            reviewer_requests,
+            review_log,
+            config,
+            review_stage,
+            phase=phase,
+            artifact_type=artifact_type,
+            artifact_path=artifact_path,
+            task_file_path=task_file_path,
+            review_round=next_round,
+        )
+        if not ok or not result:
+            return False, None, error_message
+
+        mark_round_used(payload, artifact_path, review_stage, next_round)
+        last_result = result
+        if not result.get("approved", False) or result.get("findings"):
+            if stage_index > 0:
+                reset_target_rounds(payload, artifact_path)
+            return True, result, ""
+
+    return True, last_result, ""
 
 
 def handle_prepare(args: argparse.Namespace) -> int:
@@ -1627,32 +1753,28 @@ def handle_finish(args: argparse.Namespace) -> int:
             eprint(f"[review] skipping unchanged approved artifact {artifact_key}")
             continue
 
-        can_review, next_round, limit_message = peek_next_round(payload, artifact_key, config["max_review_turns"])
-        if not can_review:
-            return return_finish_result(limit_message, args.hook_event)
-
-        try:
-            reviewer_requests = build_document_reviewer_requests(root, args.phase, artifact, config, next_round)
-        except ValueError as exc:
-            message = str(exc)
-            return return_finish_result(message, args.hook_event)
-
-        ok, result, error_message = run_codex_parallel(
+        ok, result, error_message = run_staged_review_gate(
             root,
-            reviewer_requests,
-            review_log,
             config,
+            payload,
+            review_log,
             phase=args.phase,
             artifact_type="document",
             artifact_path=artifact_key,
             task_file_path=None,
-            review_round=next_round,
+            reviewer_request_builder=lambda review_stage, next_round: build_document_reviewer_requests(
+                root,
+                args.phase,
+                artifact,
+                config,
+                review_stage,
+                next_round,
+            ),
         )
         if not ok or not result:
             message = f"`codex exec` review failed for {artifact_key}: {error_message}"
             return return_finish_result(message, args.hook_event)
 
-        mark_round_used(payload, artifact_key, next_round)
         if not result.get("approved", False) or result.get("findings"):
             approved_hashes.pop(artifact_key, None)
             approved_snapshots.pop(artifact_key, None)
@@ -1700,30 +1822,29 @@ def handle_review_task(args: argparse.Namespace) -> int:
     task_key = task_path.as_posix()
     ensure_target_registered(payload, task_key)
 
-    can_review, next_round, limit_message = peek_next_round(payload, task_key, config["max_review_turns"])
-    if not can_review:
-        write_state(current_state_path, payload)
-        eprint(limit_message)
-        return 1
-
     review_log = log_path(root, args.interface, "implement", args.session_id)
-    reviewer_requests = build_implementation_reviewer_requests(root, task_path, config, next_round)
-    ok, result, error_message = run_codex_parallel(
+    ok, result, error_message = run_staged_review_gate(
         root,
-        reviewer_requests,
-        review_log,
         config,
+        payload,
+        review_log,
         phase="implement",
         artifact_type="implementation-task",
         artifact_path=task_key,
         task_file_path=task_key,
-        review_round=next_round,
+        reviewer_request_builder=lambda review_stage, next_round: build_implementation_reviewer_requests(
+            root,
+            task_path,
+            config,
+            review_stage,
+            next_round,
+        ),
     )
     if not ok or not result:
+        write_state(current_state_path, payload)
         eprint(f"`codex exec` implementation review failed for {task_key}: {error_message}")
         return 1
 
-    mark_round_used(payload, task_key, next_round)
     write_state(current_state_path, payload)
 
     if not result.get("approved", False) or result.get("findings"):

@@ -385,9 +385,9 @@ class PromptConstructionTests(ReviewDriverTestCase):
         prompt = reviewer_requests[1]["prompt"]
 
         self.assertIn(review_driver.read_text_file(cycle_doc), prompt)
-        self.assertIn("Review order:", prompt)
+        self.assertIn("Authority order:", prompt)
         self.assertIn(
-            "First, verify compliance with the active cycle CYCLE.md and the other provided workflow references.",
+            "First, verify compliance with the current user request and the active cycle CYCLE.md and the other provided workflow references.",
             prompt,
         )
         self.assertIn(
@@ -398,7 +398,7 @@ class PromptConstructionTests(ReviewDriverTestCase):
             "Do not require `ACTIVE` or `DONE` during `plan-tasks` or `fix-tasks` review just because the artifacts appear complete.",
             prompt,
         )
-        self.assertIn("Do not report findings or suggested fixes that conflict with the provided documents.", prompt)
+        self.assertIn("Do not report findings or suggested fixes that conflict with the current user request or the provided documents.", prompt)
         self.assertIn("The artifact complies with the active cycle design and requirements in CYCLE.md.", prompt)
         self.assertNotIn("Priority review lens:", reviewer_requests[0]["prompt"])
         self.assertIn("Priority review lens:", prompt)
@@ -415,7 +415,7 @@ class PromptConstructionTests(ReviewDriverTestCase):
 
         self.assertIn("Treat the task file as the source of truth for task-specific requirements in this review.", prompt)
         self.assertIn(
-            "First, verify compliance with the task file and the provided workflow references.",
+            "First, verify compliance with the current user request and the task file and the provided workflow references.",
             prompt,
         )
         self.assertIn(

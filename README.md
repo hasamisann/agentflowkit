@@ -20,6 +20,25 @@ On POSIX shells:
 
 Add `-InitGit` or `--init-git` when you want the initializer to create a git repository.
 
+The initializer creates these symlinks:
+
+- `.claude/skills` -> `../.agents/skills`
+- `CLAUDE.md` -> `AGENTS.md`
+
+On Windows, symlink creation requires Developer Mode or an administrator PowerShell. If the initializer reports a symlink error, re-run it from an administrator PowerShell or create the links manually:
+
+```powershell
+New-Item -ItemType SymbolicLink -Path .claude\skills -Target ..\.agents\skills
+New-Item -ItemType SymbolicLink -Path CLAUDE.md -Target AGENTS.md
+```
+
+On POSIX shells, the equivalent manual commands are:
+
+```sh
+ln -s ../.agents/skills .claude/skills
+ln -s AGENTS.md CLAUDE.md
+```
+
 ## Workflow Phases
 
 - `specify-design`: define a cycle and produce `CYCLE.md`

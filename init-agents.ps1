@@ -93,6 +93,25 @@ function Ensure-ClaudeSkillsSymlink {
   }
 }
 
+function Ensure-ClaudeMarkdownSymlink {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TargetRoot
+  )
+
+  $claudePath = Join-Path $TargetRoot "CLAUDE.md"
+
+  Backup-PathIfExists -Path $claudePath
+
+  try {
+    New-Item -ItemType SymbolicLink -Path $claudePath -Target "AGENTS.md" -Force | Out-Null
+    Write-Host "  Linked CLAUDE.md -> AGENTS.md"
+  }
+  catch {
+    Add-ErrorMessage "Failed to create CLAUDE.md symlink. On Windows, enable Developer Mode or run PowerShell as administrator. Details: $($_.Exception.Message)"
+  }
+}
+
 function Get-TemplateEntries {
   param(
     [Parameter(Mandatory = $true)]
@@ -216,7 +235,7 @@ Copy-TopLevelItem -RelativePath ".agents" -TargetRoot $TargetRoot
 Ensure-ClaudeSkillsSymlink -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath ".spec" -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath "AGENTS.md" -TargetRoot $TargetRoot
-Copy-TopLevelItem -RelativePath "CLAUDE.md" -TargetRoot $TargetRoot
+Ensure-ClaudeMarkdownSymlink -TargetRoot $TargetRoot
 
 Ensure-GitIgnoreEntries -TargetRoot $TargetRoot
 

@@ -87,6 +87,16 @@ ensure_claude_skills_symlink() {
   fi
 }
 
+ensure_claude_markdown_symlink() {
+  claude_path="$TARGET_DIR/CLAUDE.md"
+  backup_path_if_exists "$claude_path"
+  if ln -s "AGENTS.md" "$claude_path"; then
+    printf '  Linked CLAUDE.md -> AGENTS.md\n'
+  else
+    error "Failed to create CLAUDE.md symlink."
+  fi
+}
+
 ensure_line_entries() {
   file_path=$1
   template_path=$2
@@ -170,7 +180,7 @@ copy_top_level_item ".agents"
 ensure_claude_skills_symlink
 copy_top_level_item ".spec"
 copy_top_level_item "AGENTS.md"
-copy_top_level_item "CLAUDE.md"
+ensure_claude_markdown_symlink
 
 ensure_gitignore_entries
 

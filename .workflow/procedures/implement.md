@@ -29,7 +29,7 @@ Implement one task or every task in one requested wave.
 6. Execute Green: implement the smallest passing change.
 7. Execute Refactor: clean up while keeping tests green.
 8. Execute Verify: run every command in `<verify>`.
-9. Run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --interface <agent-interface> --task-file <task-file>` and include `--session-id <session-id>` when the host provides one.
+9. Run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" review-task --task-file <task-file>`.
 10. Include the full task file contents in the implementation review prompt, treat the current user request as authoritative over the task file, treat that task file as authoritative over review suggestions, and require the `codex exec` reviewer to verify compliance with the task's `<test>`, `<action>`, `<refactor>`, `<verify>`, and `<done>` sections.
 11. Validate review findings before applying them:
     - fix valid `CRITICAL` and `MAJOR` findings

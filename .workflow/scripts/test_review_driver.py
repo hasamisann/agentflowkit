@@ -495,6 +495,25 @@ class PrematureStatusFindingSuppressionTests(ReviewDriverTestCase):
 
 
 class RoundTrackingTests(ReviewDriverTestCase):
+    def test_state_and_log_paths_are_phase_scoped(self) -> None:
+        self.assertEqual(
+            review_driver.state_path(self.root, "plan-tasks"),
+            self.root / "logs" / "reviews" / "plan-tasks.state.json",
+        )
+        self.assertEqual(
+            review_driver.log_path(self.root, "plan-tasks"),
+            self.root / "logs" / "reviews" / "plan-tasks.json",
+        )
+
+    def test_parser_rejects_removed_interface_argument(self) -> None:
+        parser = review_driver.build_parser()
+        stderr = io.StringIO()
+
+        with self.assertRaises(SystemExit), contextlib.redirect_stderr(stderr):
+            parser.parse_args(["prepare", "--interface", "opencode", "--phase", "plan-tasks"])
+
+        self.assertIn("unrecognized arguments", stderr.getvalue())
+
     def test_peek_next_round_stops_after_limit(self) -> None:
         payload = {"rounds": {"artifact.md": {"screening": 9}}}
         stage = {"label": "screening", "max_review_turns": 10}
@@ -521,11 +540,10 @@ class RoundTrackingTests(ReviewDriverTestCase):
         self.assertEqual(message, "")
 
     def test_prepare_resets_existing_review_rounds(self) -> None:
-        stale_state = review_driver.state_path(self.root, "opencode", "implement", None)
+        stale_state = review_driver.state_path(self.root, "implement")
         review_driver.write_state(
             stale_state,
             {
-                "interface": "opencode",
                 "phase": "implement",
                 "arguments": "wave 1",
                 "rounds": {"task.md": {"screening": 7}},
@@ -535,7 +553,7 @@ class RoundTrackingTests(ReviewDriverTestCase):
             },
         )
 
-        args = argparse.Namespace(interface="opencode", phase="implement", session_id=None, arguments="wave 1")
+        args = argparse.Namespace(phase="implement", arguments="wave 1")
         with contextlib.redirect_stdout(io.StringIO()):
             result = review_driver.handle_prepare(args)
         payload = review_driver.read_state(stale_state)
@@ -553,12 +571,10 @@ class RoundTrackingTests(ReviewDriverTestCase):
 class ApprovalAwareFinishTests(ReviewDriverTestCase):
     def prepare_specify_design_state(self) -> tuple[Path, Path, Path, Path]:
         cycle_doc, manifest, cycle_index = create_cycle_artifacts(self.root)
-        state_path = review_driver.state_path(self.root, "opencode", "specify-design", None)
+        state_path = review_driver.state_path(self.root, "specify-design")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "opencode",
             "specify-design",
-            None,
             "demo feature",
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
@@ -567,12 +583,10 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
     def prepare_investigate_state(self) -> tuple[Path, Path]:
         investigation = create_investigation_artifact(self.root)
-        state_path = review_driver.state_path(self.root, "opencode", "investigate", None)
+        state_path = review_driver.state_path(self.root, "investigate")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "opencode",
             "investigate",
-            None,
             "b001-demo",
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
@@ -583,7 +597,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, cycle_index, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="specify-design")
             result = review_driver.handle_finish(args)
 
         state = review_driver.read_state(state_path)
@@ -600,14 +614,14 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, _, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="specify-design")
             first_result = review_driver.handle_finish(args)
 
         write_file(cycle_doc, review_driver.read_text_file(cycle_doc).replace("**Status**: DRAFT", "**Status**: FINALIZED"))
         write_file(manifest, review_driver.read_text_file(manifest).replace("| DRAFT |", "| FINALIZED |"))
 
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel:
-            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="specify-design")
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -619,7 +633,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         cycle_doc, manifest, _, state_path = self.prepare_specify_design_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="specify-design")
             first_result = review_driver.handle_finish(args)
 
         write_file(
@@ -633,7 +647,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
         stderr = io.StringIO()
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel, contextlib.redirect_stderr(stderr):
-            args = argparse.Namespace(interface="opencode", phase="specify-design", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="specify-design")
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -646,7 +660,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         investigation, state_path = self.prepare_investigate_state()
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, approved_review_result(), "")):
-            args = argparse.Namespace(interface="opencode", phase="investigate", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="investigate")
             first_result = review_driver.handle_finish(args)
 
         write_file(
@@ -655,7 +669,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         )
 
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel:
-            args = argparse.Namespace(interface="opencode", phase="investigate", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="investigate")
             second_result = review_driver.handle_finish(args)
 
         self.assertEqual(first_result, 0)
@@ -681,12 +695,10 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
         )
         write_file(self.root / ".workflow" / "project_context.md", "# Project Context\n")
 
-        state_path = review_driver.state_path(self.root, "opencode", "plan-tasks", None)
+        state_path = review_driver.state_path(self.root, "plan-tasks")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "opencode",
             "plan-tasks",
-            None,
             "plan tasks",
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
@@ -694,7 +706,7 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
         stderr = io.StringIO()
         with mock.patch.object(review_driver, "run_codex_parallel") as run_codex_parallel, contextlib.redirect_stderr(stderr):
-            args = argparse.Namespace(interface="opencode", phase="plan-tasks", session_id=None, hook_event=None)
+            args = argparse.Namespace(phase="plan-tasks")
             result = review_driver.handle_finish(args)
 
         self.assertEqual(result, 1)
@@ -704,18 +716,16 @@ class ApprovalAwareFinishTests(ReviewDriverTestCase):
 
 
 class ReviewTaskTests(ReviewDriverTestCase):
-    def test_review_task_uses_session_state_and_records_round(self) -> None:
+    def test_review_task_uses_implement_state_and_records_round(self) -> None:
         task_path = self.root / ".spec" / "cycles" / "c01-demo" / "tasks" / "impl-001-demo.md"
         write_file(task_path, "# Task\n")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "claude",
             "implement",
-            "session-1",
             task_path.as_posix(),
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
-        review_driver.write_state(review_driver.state_path(self.root, "claude", "implement", "session-1"), payload)
+        review_driver.write_state(review_driver.state_path(self.root, "implement"), payload)
 
         merged_result = {
             "approved": True,
@@ -725,11 +735,11 @@ class ReviewTaskTests(ReviewDriverTestCase):
         }
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, merged_result, "")):
-            args = argparse.Namespace(interface="claude", task_file=task_path.as_posix(), session_id="session-1")
+            args = argparse.Namespace(task_file=task_path.as_posix())
             with contextlib.redirect_stdout(io.StringIO()):
                 result = review_driver.handle_review_task(args)
 
-        state = review_driver.read_state(review_driver.state_path(self.root, "claude", "implement", "session-1"))
+        state = review_driver.read_state(review_driver.state_path(self.root, "implement"))
         self.assertEqual(result, 0)
         self.assertIsNotNone(state)
         if state is None:
@@ -741,13 +751,11 @@ class ReviewTaskTests(ReviewDriverTestCase):
         write_file(task_path, "# Task\n")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "opencode",
             "implement",
-            None,
             task_path.as_posix(),
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
-        review_driver.write_state(review_driver.state_path(self.root, "opencode", "implement", None), payload)
+        review_driver.write_state(review_driver.state_path(self.root, "implement"), payload)
 
         blocking_result = merged_review_result(
             [
@@ -763,11 +771,11 @@ class ReviewTaskTests(ReviewDriverTestCase):
         blocking_result["review_stage"] = "screening"
 
         with mock.patch.object(review_driver, "run_codex_parallel", return_value=(True, blocking_result, "")) as run_codex_parallel:
-            args = argparse.Namespace(interface="opencode", task_file=task_path.as_posix(), session_id=None)
+            args = argparse.Namespace(task_file=task_path.as_posix())
             with contextlib.redirect_stderr(io.StringIO()):
                 result = review_driver.handle_review_task(args)
 
-        state = review_driver.read_state(review_driver.state_path(self.root, "opencode", "implement", None))
+        state = review_driver.read_state(review_driver.state_path(self.root, "implement"))
         self.assertEqual(result, 1)
         self.assertEqual(run_codex_parallel.call_count, 1)
         self.assertIsNotNone(state)
@@ -780,13 +788,11 @@ class ReviewTaskTests(ReviewDriverTestCase):
         write_file(task_path, "# Task\n")
         payload = review_driver.fresh_state_payload(
             self.root,
-            "opencode",
             "implement",
-            None,
             task_path.as_posix(),
             self.root / ".workflow" / "config" / "codex-review.toml",
         )
-        review_driver.write_state(review_driver.state_path(self.root, "opencode", "implement", None), payload)
+        review_driver.write_state(review_driver.state_path(self.root, "implement"), payload)
 
         final_blocking_result = merged_review_result(
             [
@@ -806,11 +812,11 @@ class ReviewTaskTests(ReviewDriverTestCase):
             "run_codex_parallel",
             side_effect=[(True, approved_review_result(), ""), (True, final_blocking_result, "")],
         ) as run_codex_parallel:
-            args = argparse.Namespace(interface="opencode", task_file=task_path.as_posix(), session_id=None)
+            args = argparse.Namespace(task_file=task_path.as_posix())
             with contextlib.redirect_stderr(io.StringIO()):
                 result = review_driver.handle_review_task(args)
 
-        state = review_driver.read_state(review_driver.state_path(self.root, "opencode", "implement", None))
+        state = review_driver.read_state(review_driver.state_path(self.root, "implement"))
         self.assertEqual(result, 1)
         self.assertEqual(run_codex_parallel.call_count, 2)
         self.assertIsNotNone(state)

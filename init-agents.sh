@@ -53,7 +53,7 @@ done
 
 backup_path_if_exists() {
   path=$1
-  if [ ! -e "$path" ]; then
+  if [ ! -e "$path" ] && [ ! -L "$path" ]; then
     return
   fi
   backup_path="$path.backup"
@@ -74,6 +74,17 @@ copy_top_level_item() {
   backup_path_if_exists "$dst"
   cp -R "$src" "$dst"
   printf '  Copied %s\n' "$rel"
+}
+
+ensure_claude_skills_symlink() {
+  mkdir -p "$TARGET_DIR/.claude"
+  skills_path="$TARGET_DIR/.claude/skills"
+  backup_path_if_exists "$skills_path"
+  if ln -s "../.agents/skills" "$skills_path"; then
+    printf '  Linked .claude/skills -> ../.agents/skills\n'
+  else
+    error "Failed to create .claude/skills symlink."
+  fi
 }
 
 ensure_line_entries() {
@@ -155,8 +166,8 @@ TARGET_DIR=$(CDPATH= cd -- "$TARGET_DIR" && pwd)
 printf 'Copying workflow files to %s...\n' "$TARGET_DIR"
 copy_top_level_item ".workflow"
 copy_top_level_item ".opencode/commands"
-copy_top_level_item ".claude"
 copy_top_level_item ".agents"
+ensure_claude_skills_symlink
 copy_top_level_item ".spec"
 copy_top_level_item "AGENTS.md"
 copy_top_level_item "CLAUDE.md"

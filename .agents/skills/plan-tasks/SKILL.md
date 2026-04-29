@@ -1,13 +1,13 @@
 ---
 name: plan-tasks
-description: Explicit Codex workflow skill invoked as $plan-tasks. Break one finalized cycle document into atomic implementation tasks for the active or specified cycle.
+description: Shared workflow skill. Break one finalized cycle document into atomic implementation tasks for the active or specified cycle.
 ---
 
-This repository skill is designed for explicit Codex invocation as `$plan-tasks`.
+This repository skill is shared by Codex, Claude Code, and OpenCode. Codex invokes it as `$plan-tasks`; Claude reads it through `.claude/skills`; OpenCode slash commands delegate to it.
 
 Read `AGENTS.md`, `.workflow/procedures/plan-tasks.md`, `.workflow/procedures/review-loop.md`, `.workflow/project_context.md`, `.workflow/templates/task_template.md`, `.workflow/templates/dependencies_template.md`, `.workflow/templates/github-actions/ci.yml`, and the resolved `CYCLE.md`.
 
-Before substantive work, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --interface codex-cli --phase plan-tasks --arguments "<restate the current user request faithfully>"`.
+Before substantive work, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" prepare --phase plan-tasks --arguments "<restate the current user request faithfully>"`.
 
 Do not rerun `prepare` after you fix your own review findings. In the same invocation, reuse the existing review state and rerun `finish`.
 
@@ -17,4 +17,4 @@ If review output unexpectedly returns to `round 1/<N>` after a prior round in th
 
 Then execute `.workflow/procedures/plan-tasks.md` exactly.
 
-Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --interface codex-cli --phase plan-tasks`. Use the same `finish` command for repeated self-fix review rounds within the same invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the plan.
+Before you stop, run `python "$(git rev-parse --show-toplevel)/.workflow/scripts/review_driver.py" finish --phase plan-tasks`. Use the same `finish` command for repeated self-fix review rounds within the same invocation; do not rerun `prepare` unless one of the reset conditions applies. Resolve every valid blocking finding (`CRITICAL` or `MAJOR`), optionally apply valid advisory findings (`MIDDLE` or `MINOR`), and if a blocking finding appears incorrect or ambiguous, ask the user before changing the plan.

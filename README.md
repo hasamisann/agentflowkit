@@ -2,7 +2,7 @@
 
 Reusable workflow scaffolding for agent-assisted software projects.
 
-This repository installs a local `.workflow`, `.spec`, and agent-interface setup into a target project. It supports OpenCode commands, Claude Code skills, and Codex CLI repository skills while sharing the same workflow artifacts and `codex exec` review gate.
+This repository installs a local `.workflow`, `.spec`, and agent setup into a target project. It supports OpenCode commands, Claude Code skills, and Codex CLI repository skills while sharing the same workflow artifacts and `codex exec` review gate.
 
 ## Install
 
@@ -30,7 +30,7 @@ Add `-InitGit` or `--init-git` when you want the initializer to create a git rep
 
 ## Agent Invocation
 
-OpenCode uses slash commands:
+OpenCode uses slash commands. These commands are thin wrappers around the shared skills in `.agents/skills`:
 
 ```text
 /specify-design
@@ -40,9 +40,9 @@ OpenCode uses slash commands:
 /fix-tasks
 ```
 
-Claude Code uses the matching skills with slash invocation.
+Claude Code uses the matching skills with slash invocation. `.claude/skills` is a symlink to `.agents/skills`.
 
-Codex CLI uses repository skills under `.agents/skills` and should be invoked explicitly with `$`:
+Codex CLI uses the repository skills under `.agents/skills` and should be invoked explicitly with `$`:
 
 ```text
 $specify-design

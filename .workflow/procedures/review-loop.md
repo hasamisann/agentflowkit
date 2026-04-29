@@ -61,10 +61,9 @@ The driver streams reviewer-specific prompts over stdin, inlines document conten
 Run this at the start of artifact creation for the command invocation so the review log path, target scope, and review-round counters are reset:
 
 ```bash
-python ".workflow/scripts/review_driver.py" prepare --interface opencode --phase plan-tasks --arguments "$ARGUMENTS"
+python ".workflow/scripts/review_driver.py" prepare --phase plan-tasks --arguments "$ARGUMENTS"
 ```
 
-For Claude skills, pass `${CLAUDE_SESSION_ID}` so each skill invocation gets its own state file.
 For `specify-design`, artifact creation starts only when the workflow begins drafting `CYCLE.md` after `grill-me`, so do not run `prepare` during grill-me-only turns.
 Re-run the same `prepare` command before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.
 
@@ -79,7 +78,7 @@ Rerun `prepare` only when the user provides manual review feedback, explicitly a
 Run this at the end of `specify-design`, `plan-tasks`, `investigate`, or `fix-tasks`:
 
 ```bash
-python ".workflow/scripts/review_driver.py" finish --interface opencode --phase plan-tasks
+python ".workflow/scripts/review_driver.py" finish --phase plan-tasks
 ```
 
 If the script exits non-zero, apply the findings and run it again.
@@ -103,13 +102,13 @@ If a later pass in the same invocation unexpectedly returns to `round 1/<max_rev
 Run this at the start of an implementation invocation so the task review-round counters are reset:
 
 ```bash
-python ".workflow/scripts/review_driver.py" prepare --interface opencode --phase implement --arguments "$ARGUMENTS"
+python ".workflow/scripts/review_driver.py" prepare --phase implement --arguments "$ARGUMENTS"
 ```
 
 Then run this after Verify and before marking the task `DONE` for each task file:
 
 ```bash
-python ".workflow/scripts/review_driver.py" review-task --interface opencode --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"
+python ".workflow/scripts/review_driver.py" review-task --task-file ".spec/cycles/c01-example/tasks/impl-001-example.md"
 ```
 
 This implementation review injects the full task file contents into the `codex exec` prompt, treats the current user request as authoritative over that task file, and treats that task file as authoritative over normal review instincts. The driver streams the prompt over stdin and requires the `codex exec` reviewer to verify the current code changes, tests, refactor, verification commands, and done condition against that task. Re-run `prepare --phase implement` before the next workflow review whenever the user supplies manual review feedback or explicitly asks to reset the review rounds.

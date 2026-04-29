@@ -69,6 +69,30 @@ function Copy-TopLevelItem {
   Write-Host "  Copied $RelativePath"
 }
 
+function Ensure-ClaudeSkillsSymlink {
+  param(
+    [Parameter(Mandatory = $true)]
+    [string]$TargetRoot
+  )
+
+  $claudeDir = Join-Path $TargetRoot ".claude"
+  $skillsPath = Join-Path $claudeDir "skills"
+
+  if (-not (Test-Path $claudeDir)) {
+    New-Item -ItemType Directory -Path $claudeDir -Force | Out-Null
+  }
+
+  Backup-PathIfExists -Path $skillsPath
+
+  try {
+    New-Item -ItemType SymbolicLink -Path $skillsPath -Target "..\.agents\skills" -Force | Out-Null
+    Write-Host "  Linked .claude\skills -> ..\.agents\skills"
+  }
+  catch {
+    Add-ErrorMessage "Failed to create .claude\skills symlink. On Windows, enable Developer Mode or run PowerShell as administrator. Details: $($_.Exception.Message)"
+  }
+}
+
 function Get-TemplateEntries {
   param(
     [Parameter(Mandatory = $true)]
@@ -188,8 +212,8 @@ $TargetRoot = (Resolve-Path $TargetDir).Path
 Write-Host "Copying workflow files to $TargetRoot..." -ForegroundColor Cyan
 Copy-TopLevelItem -RelativePath ".workflow" -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath ".opencode\commands" -TargetRoot $TargetRoot
-Copy-TopLevelItem -RelativePath ".claude" -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath ".agents" -TargetRoot $TargetRoot
+Ensure-ClaudeSkillsSymlink -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath ".spec" -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath "AGENTS.md" -TargetRoot $TargetRoot
 Copy-TopLevelItem -RelativePath "CLAUDE.md" -TargetRoot $TargetRoot

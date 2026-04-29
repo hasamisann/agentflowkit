@@ -10,17 +10,17 @@ Read `.workflow/project_context.md` for repository-specific build, test, archite
 - `investigate`
 - `fix-tasks`
 
-Invocation differs by agent interface:
+Invocation differs by agent entrypoint:
 
 - OpenCode commands: `/specify-design`, `/plan-tasks`, `/implement`, `/investigate`, `/fix-tasks`
 - Claude Code skills: `/specify-design`, `/plan-tasks`, `/implement`, `/investigate`, `/fix-tasks`
 - Codex skills: `$specify-design`, `$plan-tasks`, `$implement`, `$investigate`, `$fix-tasks`
 
-Codex CLI support is implemented as repository skills under `.agents/skills`; these are invoked with `$<skill-name>` or selected from Codex's skill picker, not as custom slash commands.
+The workflow skill bodies live only under `.agents/skills`. Codex reads that directory directly, Claude reads the same skills through the `.claude/skills` symlink, and OpenCode slash commands delegate to those shared skills.
 
 Terminology:
 
-- `Codex CLI support` means the human-facing Codex agent interface and the repository skills in `.agents/skills`.
+- `Codex CLI support` means the human-facing Codex agent entrypoint and the repository skills in `.agents/skills`.
 - ``codex exec` review gate` means the mandatory read-only reviewer launched by `.workflow/scripts/review_driver.py`.
 - `.workflow/config/codex-review.toml` configures only the review gate; it is not interactive Codex CLI configuration.
 

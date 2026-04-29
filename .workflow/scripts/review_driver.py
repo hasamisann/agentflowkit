@@ -46,17 +46,6 @@ def eprint(message: str) -> None:
     print(message, file=sys.stderr)
 
 
-def read_stdin_json() -> dict[str, Any]:
-    raw = sys.stdin.read().strip()
-    if not raw:
-        return {}
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        return {}
-    return data if isinstance(data, dict) else {}
-
-
 def find_repo_root(start: Path) -> Path:
     current = start.resolve()
     for candidate in [current, *current.parents]:
@@ -76,14 +65,12 @@ def slugify(value: str) -> str:
     return cleaned.strip("-") or "default"
 
 
-def state_path(root: Path, interface: str, phase: str, session_id: str | None) -> Path:
-    suffix = f"-{slugify(session_id)}" if session_id else ""
-    return ensure_logs_dir(root) / f"{interface}-{phase}{suffix}.state.json"
+def state_path(root: Path, phase: str) -> Path:
+    return ensure_logs_dir(root) / f"{phase}.state.json"
 
 
-def log_path(root: Path, interface: str, phase: str, session_id: str | None) -> Path:
-    suffix = f"-{slugify(session_id)}" if session_id else ""
-    return ensure_logs_dir(root) / f"{interface}-{phase}{suffix}.json"
+def log_path(root: Path, phase: str) -> Path:
+    return ensure_logs_dir(root) / f"{phase}.json"
 
 
 def reviewer_output_path(output_path: Path, stage_label: str, reviewer_index: int) -> Path:
@@ -1501,39 +1488,33 @@ def coerce_non_negative_int(value: Any) -> int:
 
 def fresh_state_payload(
     root: Path,
-    interface: str,
     phase: str,
-    session_id: str | None,
     arguments: str,
     review_config_path: Path,
 ) -> dict[str, Any]:
     return {
-        "interface": interface,
         "phase": phase,
-        "session_id": session_id,
         "arguments": arguments,
-        "state_path": str(state_path(root, interface, phase, session_id)),
-        "review_log_path": str(log_path(root, interface, phase, session_id)),
+        "state_path": str(state_path(root, phase)),
+        "review_log_path": str(log_path(root, phase)),
         "review_config_path": str(review_config_path),
         "targets": [path.as_posix() for path in resolve_task_targets(root, arguments)] if phase == "implement" else [],
         "rounds": {},
         "approved_hashes": {},
         "approved_snapshots": {},
         "awaiting_user_approval": False,
-        "state_version": 5,
+        "state_version": 6,
     }
 
 
 def hydrate_state_payload(
     root: Path,
-    interface: str,
     phase: str,
-    session_id: str | None,
     arguments: str,
     review_config_path: Path,
     payload: dict[str, Any] | None,
 ) -> dict[str, Any]:
-    state = fresh_state_payload(root, interface, phase, session_id, arguments, review_config_path)
+    state = fresh_state_payload(root, phase, arguments, review_config_path)
     if not payload:
         return state
 
@@ -1706,29 +1687,20 @@ def handle_prepare(args: argparse.Namespace) -> int:
         eprint(str(exc))
         return 1
 
-    payload = fresh_state_payload(root, args.interface, args.phase, args.session_id, args.arguments, config["config_path"])
-    write_state(state_path(root, args.interface, args.phase, args.session_id), payload)
-    print(f"Prepared review state for {args.interface}:{args.phase}.")
+    payload = fresh_state_payload(root, args.phase, args.arguments, config["config_path"])
+    write_state(state_path(root, args.phase), payload)
+    print(f"Prepared review state for {args.phase}.")
     return 0
 
 
-def finish_decision(reason: str) -> str:
-    return json.dumps({"decision": "block", "reason": reason}, ensure_ascii=True)
-
-
-def return_finish_result(message: str, hook_event: str | None) -> int:
-    if hook_event:
-        print(finish_decision(message))
-        return 0
+def return_finish_result(message: str) -> int:
     eprint(message)
     return 1
 
 
 def handle_finish(args: argparse.Namespace) -> int:
-    hook_input = read_stdin_json() if args.hook_event else {}
-    session_id = args.session_id or str(hook_input.get("session_id", "") or "") or None
-    root = find_repo_root(Path(hook_input.get("cwd", os.getcwd())))
-    current_state_path = state_path(root, args.interface, args.phase, session_id)
+    root = find_repo_root(Path.cwd())
+    current_state_path = state_path(root, args.phase)
     raw_payload = read_state(current_state_path)
     if not raw_payload:
         return 0
@@ -1737,13 +1709,11 @@ def handle_finish(args: argparse.Namespace) -> int:
         config = load_review_config(root)
     except ValueError as exc:
         message = str(exc)
-        return return_finish_result(message, args.hook_event)
+        return return_finish_result(message)
 
     payload = hydrate_state_payload(
         root,
-        args.interface,
         args.phase,
-        session_id,
         str(raw_payload.get("arguments", "")),
         config["config_path"],
         raw_payload,
@@ -1753,7 +1723,7 @@ def handle_finish(args: argparse.Namespace) -> int:
     if is_approval_gated_phase(args.phase) and bool(payload.get("awaiting_user_approval", False)):
         issues = validate_approval_finalization(root, args.phase, artifacts, payload)
         if issues:
-            return return_finish_result("\n".join(issues), args.hook_event)
+            return return_finish_result("\n".join(issues))
         current_state_path.unlink(missing_ok=True)
         return 0
 
@@ -1761,7 +1731,7 @@ def handle_finish(args: argparse.Namespace) -> int:
         current_state_path.unlink(missing_ok=True)
         return 0
 
-    review_log = log_path(root, args.interface, args.phase, session_id)
+    review_log = log_path(root, args.phase)
     approved_hashes = approved_hashes_map(payload)
     approved_snapshots = approved_snapshots_map(payload)
     for artifact in artifacts:
@@ -1792,7 +1762,7 @@ def handle_finish(args: argparse.Namespace) -> int:
         )
         if not ok or not result:
             message = f"`codex exec` review failed for {artifact_key}: {error_message}"
-            return return_finish_result(message, args.hook_event)
+            return return_finish_result(message)
 
         if not result.get("approved", False) or result.get("findings"):
             approved_hashes.pop(artifact_key, None)
@@ -1800,7 +1770,7 @@ def handle_finish(args: argparse.Namespace) -> int:
             payload["awaiting_user_approval"] = False
             write_state(current_state_path, payload)
             message = build_failure_message(artifact_key, result)
-            return return_finish_result(message, args.hook_event)
+            return return_finish_result(message)
 
         approved_hashes[artifact_key] = artifact_hash
         approved_snapshots[artifact_key] = read_text_file(artifact)
@@ -1828,12 +1798,10 @@ def handle_review_task(args: argparse.Namespace) -> int:
         eprint(f"Task file not found: {task_path}")
         return 1
 
-    current_state_path = state_path(root, args.interface, "implement", args.session_id)
+    current_state_path = state_path(root, "implement")
     payload = hydrate_state_payload(
         root,
-        args.interface,
         "implement",
-        args.session_id,
         "",
         config["config_path"],
         read_state(current_state_path),
@@ -1841,7 +1809,7 @@ def handle_review_task(args: argparse.Namespace) -> int:
     task_key = task_path.as_posix()
     ensure_target_registered(payload, task_key)
 
-    review_log = log_path(root, args.interface, "implement", args.session_id)
+    review_log = log_path(root, "implement")
     ok, result, error_message = run_staged_review_gate(
         root,
         config,
@@ -1880,23 +1848,16 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     prepare = subparsers.add_parser("prepare")
-    prepare.add_argument("--interface", required=True)
     prepare.add_argument("--phase", required=True, choices=sorted(PHASES))
-    prepare.add_argument("--session-id")
     prepare.add_argument("--arguments", default="")
     prepare.set_defaults(handler=handle_prepare)
 
     finish = subparsers.add_parser("finish")
-    finish.add_argument("--interface", required=True)
     finish.add_argument("--phase", required=True, choices=FINISH_PHASES)
-    finish.add_argument("--session-id")
-    finish.add_argument("--hook-event")
     finish.set_defaults(handler=handle_finish)
 
     review_task = subparsers.add_parser("review-task")
-    review_task.add_argument("--interface", required=True)
     review_task.add_argument("--task-file", required=True)
-    review_task.add_argument("--session-id")
     review_task.set_defaults(handler=handle_review_task)
 
     return parser
